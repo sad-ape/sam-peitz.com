@@ -79,32 +79,67 @@
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
+  /* the hairline stops short of the knob either side (main.js sets where the
+     knob is, --when, 0 to 1 through the day, and how wide it is, --gap) */
   #time::-webkit-slider-runnable-track {
     height: 26px;
-    background: linear-gradient(rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.35)) center / 100% 1px no-repeat;
+    background: linear-gradient(to right,
+        rgba(255, 255, 255, 0.35) calc(10px + var(--when, 0.5) * 96px - var(--gap, 11px)),
+        transparent 0 calc(10px + var(--when, 0.5) * 96px + var(--gap, 11px)),
+        rgba(255, 255, 255, 0.35) 0) center / 100% 1px no-repeat;
   }
+  /* the slider's own thumb is there to be dragged, but not seen: #knob is
+     drawn over it */
   #time::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    margin-top: 6px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    width: 20px;
+    height: 20px;
+    margin-top: 3px;
+    border: 0;
+    background: none;
   }
   #time::-moz-range-track {
     height: 1px;
-    background: rgba(255, 255, 255, 0.35);
+    background: linear-gradient(to right,
+        rgba(255, 255, 255, 0.35) calc(10px + var(--when, 0.5) * 96px - var(--gap, 11px)),
+        transparent 0 calc(10px + var(--when, 0.5) * 96px + var(--gap, 11px)),
+        rgba(255, 255, 255, 0.35) 0);
   }
   #time::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
     border: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    background: none;
   }
-  .veiled #time, .camera #time { visibility: hidden; }
+  /* the knob: a white sun by day, the moon by night, turning from one into
+     the other (main.js draws it), exactly over the thumb */
+  #knob {
+    position: fixed;
+    left: calc(50% - 59px + var(--when, 0.5) * 96px);
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    width: 22px;
+    height: 22px;
+    overflow: visible;
+    pointer-events: none;
+    filter: drop-shadow(0 0.5px 1px rgba(0, 0, 0, 0.25));
+  }
+  /* the time the slider is at: the visitor's own when the page opens */
+  #clock {
+    position: fixed;
+    left: 50%;
+    bottom: calc(48px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    height: 18px;
+    box-sizing: border-box;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.34);
+    color: rgba(255, 255, 255, 0.9);
+    font: 500 11px/14px ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .veiled #time, .camera #time, .veiled #knob, .camera #knob, .veiled #clock, .camera #clock { visibility: hidden; }
   /* a quiet ring for the keyboard, not the browser's blue one */
   #time:focus { outline: none; }
   #time:focus-visible { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
@@ -171,7 +206,13 @@
 
 <canvas id="blind" aria-hidden="true"></canvas>
 <button id="close" type="button">close camera</button>
-<input id="time" type="range" min="0" max="1000" aria-label="time of day, midnight to midnight">
+<input id="time" type="range" min="0" max="1440" aria-label="time of day, midnight to midnight">
+<svg id="knob" viewBox="-11 -11 22 22" aria-hidden="true">
+  <mask id="knob-mask"><rect x="-11" y="-11" width="22" height="22" fill="#fff"/><circle id="knob-shadow" cx="14" cy="-14" r="5.5"/></mask>
+  <path id="knob-rays" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>
+  <circle id="knob-disc" r="3.6" fill="#fff" mask="url(#knob-mask)"/>
+</svg>
+<div id="clock" aria-hidden="true"></div>
 <button id="sound" type="button" class="off" aria-pressed="false" aria-label="sound"></button>
 
 <script type="module" src="main.js"></script>

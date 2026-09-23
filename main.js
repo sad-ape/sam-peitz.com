@@ -27,6 +27,7 @@ const photo = document.getElementById('photo');
 const video = document.getElementById('camera');
 const closeButton = document.getElementById('close');
 const humans = document.getElementById('humans');
+const clockText = document.getElementById('clock');
 
 const model = new BlindsModel();
 model.liftEnabled = true;
@@ -110,6 +111,13 @@ function layout() {
   const vbW = W / k, vbH = H / k;
   if (designed) page.setAttribute('viewBox', `${(MOCK_W - vbW) / 2} 0 ${vbW} ${vbH}`);
   for (const g of groups) g.el.setAttribute('transform', `translate(0 ${g.mid * (vbH / MOCK_H - 1)})`);
+  // the links row keeps clear of the time above the slider, where a screen
+  // leaves too little room under it
+  if (designed && clockText) {
+    const links = groups[groups.length - 1];
+    const over = links.el.getBoundingClientRect().bottom - (clockText.getBoundingClientRect().top - 10);
+    if (over > 0) links.el.setAttribute('transform', `translate(0 ${links.mid * (vbH / MOCK_H - 1) - over / k})`);
+  }
   if (tech) {
     const boxes = tech.lines.map(l => l.el.getBoundingClientRect());
     techTop = Math.min(...boxes.map(b => b.top));
@@ -254,13 +262,89 @@ function applySky(t) {
   sound.day = 1 - sky.night;                                   // birds by day
   // by moonlight the print is dim and nearly colourless, like everything else
   if (photo) photo.style.filter = sky.night > 0 ? `brightness(${1 - 0.58 * sky.night}) saturate(${1 - 0.45 * sky.night})` : '';
+  knobGoal = sky.night > 0.5 ? 1 : 0;                         // the knob: the sun, or the moon
   dirty = true;
 }
-// it opens at the visitor's own time of day
+
+/// The slider, in minutes: the time above it as the visitor's own clock
+/// would put it, and where the knob is. The light follows over a moment
+/// (settle), so a jump across the day fades rather than cuts.
+const hhmm = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+let skyNow = 0, skyGoal = 0;
+function setTime() {
+  const minutes = Number(slider.value);
+  const text = hhmm.format(new Date(2000, 0, 1, Math.floor(minutes / 60) % 24, minutes % 60)).toLowerCase();
+  if (clockText) clockText.textContent = text;
+  slider.setAttribute('aria-valuetext', text);
+  document.documentElement.style.setProperty('--when', minutes / 1440);
+  skyGoal = minutes / 1440;
+}
+
+/// The knob, drawn over the slider's own (unseen) thumb: a white sun by day,
+/// the moon by night. Between them the sun's rays draw in, turning a little,
+/// as its disc swells into a full moon, and then a shadow slides across to
+/// leave the crescent - or all of it backwards at dawn.
+const knobRays = document.getElementById('knob-rays');
+const knobDisc = document.getElementById('knob-disc');
+const knobShadow = document.getElementById('knob-shadow');
+let knobPhase = 0, knobGoal = 0;                              // 0 the sun .. 1 the moon
+const KNOB_TURN = 0.7;                                        // seconds from one to the other
+
+function drawKnob(m) {
+  if (!knobDisc) return;
+  const ease = (a, b) => {
+    const u = Math.min(Math.max((m - a) / (b - a), 0), 1);
+    return u * u * (3 - 2 * u);
+  };
+  const rays = 1 - ease(0, 0.55);
+  const r = 3.6 + 2.8 * ease(0.1, 0.65);
+  const inner = r + 2.2 * rays, outer = inner + 1.7 * rays;
+  let d = '';
+  if (rays > 0.01) {
+    const turn = (1 - rays) * Math.PI / 8;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + turn, c = Math.cos(a), s = Math.sin(a);
+      d += `M${(c * inner).toFixed(2)} ${(s * inner).toFixed(2)}L${(c * outer).toFixed(2)} ${(s * outer).toFixed(2)}`;
+    }
+  }
+  knobRays.setAttribute('d', d);
+  knobRays.setAttribute('opacity', rays.toFixed(3));
+  knobDisc.setAttribute('r', r.toFixed(2));
+  // the shadow comes in from the upper right, from clear of the disc
+  const off = 14 - 10.2 * ease(0.4, 1);
+  knobShadow.setAttribute('cx', (0.76 * off).toFixed(2));
+  knobShadow.setAttribute('cy', (-0.65 * off).toFixed(2));
+  // the hairline stops this far either side of the knob's middle
+  document.documentElement.style.setProperty('--gap', `${(Math.max(outer + 0.7, r) + 3).toFixed(1)}px`);
+}
+
+/// Each frame: the light a step nearer the slider, the knob a step nearer
+/// the sun or the moon.
+let settledAt = 0;
+function settle(now) {
+  const dt = Math.min(Math.max(now - settledAt, 0) / 1000, 0.1);
+  settledAt = now;
+  if (skyNow !== skyGoal) {
+    skyNow += (skyGoal - skyNow) * (1 - Math.exp(-dt / 0.12));
+    if (Math.abs(skyGoal - skyNow) < 2e-4) skyNow = skyGoal;
+    applySky(skyNow);
+  }
+  if (knobPhase !== knobGoal) {
+    const step = dt / KNOB_TURN;
+    knobPhase = knobGoal > knobPhase ? Math.min(knobPhase + step, knobGoal) : Math.max(knobPhase - step, knobGoal);
+    drawKnob(knobPhase);
+  }
+}
+
+// it opens at the visitor's own time of day, the knob already the sun or the moon
 const clock = new Date();
-slider.value = Math.round((clock.getHours() + clock.getMinutes() / 60) / 24 * 1000);
-applySky(slider.value / 1000);
-slider.addEventListener('input', () => applySky(slider.value / 1000));
+slider.value = clock.getHours() * 60 + clock.getMinutes();
+setTime();
+skyNow = skyGoal;
+applySky(skyNow);
+knobPhase = knobGoal;
+drawKnob(knobPhase);
+slider.addEventListener('input', setTime);
 
 // ----------------------------------------------------------------- camera
 
@@ -597,6 +681,7 @@ function sparkle(now) {
 
 function frame(now) {
   requestAnimationFrame(frame);
+  settle(now);
   if (starsIn !== null && !sparkled) sparkle(now);
 
   if (print.glide) {

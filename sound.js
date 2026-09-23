@@ -85,34 +85,31 @@ export class Soundscape {
     this.birds();
   }
 
-  /// Wind: air through gaps - two narrow bands of noise that wander in pitch,
-  /// a faint whistle, and a light hiss over them. Kept narrow on purpose: a
-  /// broad band of noise rising and falling is the sea, however it's tuned.
+  /// Wind: air, not surf - pink noise with the rumble taken out, through a
+  /// band that the gusts push up and open, and a thin whistle over it.
   buildWind() {
     const ctx = this.ctx;
     const src = loop(ctx, this.noise);
     const low = ctx.createBiquadFilter();
     low.type = 'highpass';
-    low.frequency.value = 400;
-    src.connect(low);
-    this.voices = [[650, 5], [1400, 7], [2300, 12]].map(([freq, q]) => {
-      const band = ctx.createBiquadFilter();
-      band.type = 'bandpass';
-      band.frequency.value = freq;
-      band.Q.value = q;
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-      low.connect(band).connect(gain);
-      gain.connect(this.far);
-      gain.connect(this.room);
-      return { band, gain, home: freq, walk: Math.random(), speed: 0 };
-    });
-    const hiss = ctx.createBiquadFilter();
-    hiss.type = 'highpass';
-    hiss.frequency.value = 3000;
-    this.hiss = ctx.createGain();
-    this.hiss.gain.value = 0;
-    low.connect(hiss).connect(this.hiss).connect(this.far);
+    low.frequency.value = 350;
+    this.band = ctx.createBiquadFilter();
+    this.band.type = 'bandpass';
+    this.band.frequency.value = 1000;
+    this.band.Q.value = 1.1;
+    this.windGain = ctx.createGain();
+    this.windGain.gain.value = 0;
+    src.connect(low).connect(this.band).connect(this.windGain);
+    this.windGain.connect(this.far);
+    this.windGain.connect(this.room);
+
+    this.whistle = ctx.createBiquadFilter();
+    this.whistle.type = 'bandpass';
+    this.whistle.frequency.value = 2100;
+    this.whistle.Q.value = 9;
+    this.whistleGain = ctx.createGain();
+    this.whistleGain.gain.value = 0;
+    low.connect(this.whistle).connect(this.whistleGain).connect(this.far);
   }
 
   /// What the hand makes: the tilt squeaking while a cord is dragged - a
@@ -151,24 +148,21 @@ export class Soundscape {
     this.rub = bed(2300, 1.6);
   }
 
-  /// Every sixth of a second each band of the wind wanders on - in pitch as
-  /// much as in level, and each its own way - and now and then it knocks
-  /// the chimes.
+  /// Every sixth of a second the wind picks where it's heading - quick and
+  /// uneven, as gusts are, not the slow swell of waves - and now and then
+  /// knocks the chimes.
   gusts() {
     let walk = Math.random(), speed = 0;
     const tick = () => {
       if (this.live) {
         speed += (Math.random() - 0.5) * 0.12 - speed * 0.2;
         walk = Math.min(Math.max(walk + speed, 0), 1);
-        const gust = this.wind * (0.3 + 0.7 * walk);
+        const gust = this.wind * (0.25 + 0.75 * walk);
         const now = this.ctx.currentTime;
-        for (const [i, v] of this.voices.entries()) {
-          v.speed += (Math.random() - 0.5) * 0.1 - v.speed * 0.15;
-          v.walk = Math.min(Math.max(v.walk + v.speed, 0), 1);
-          v.band.frequency.setTargetAtTime(v.home * (0.75 + 0.6 * v.walk), now, 0.5);
-          v.gain.gain.setTargetAtTime([0.05, 0.035, 0.012][i] * gust * (0.4 + 0.6 * v.walk), now, 0.5);
-        }
-        this.hiss.gain.setTargetAtTime(0.006 * gust, now, 0.6);
+        this.windGain.gain.setTargetAtTime(0.05 * gust, now, 0.4);          // toned back
+        this.band.frequency.setTargetAtTime(700 + 1000 * gust, now, 0.5);
+        this.whistleGain.gain.setTargetAtTime(0.005 * gust * gust, now, 0.6);
+        this.whistle.frequency.setTargetAtTime(1800 + 700 * walk, now, 0.8);
         // the harder it blows, the more the chimes knock together
         if (Math.random() < 0.01 + 0.25 * Math.max(gust - 0.35, 0)) this.chime(now + Math.random() * 0.15);
       }
@@ -294,30 +288,31 @@ export class Soundscape {
   lock() {
     if (!this.live) return;
     const now = this.ctx.currentTime;
-    this.strike({ level: 0.05, pitch: 0.6, ring: 0.012, tone: 0.2, knock: 0.4, pan: 0.3 });
-    this.strike({ level: 0.03, pitch: 0.65, ring: 0.01, tone: 0.2, knock: 0.3, when: now + 0.018, pan: 0.3 });
+    this.strike({ level: 0.025, pitch: 0.55, ring: 0.01, tone: 0.15, knock: 0.5, pan: 0.3 });
+    this.strike({ level: 0.015, pitch: 0.6, ring: 0.008, tone: 0.15, knock: 0.4, when: now + 0.018, pan: 0.3 });
   }
 
-  /// A slat joining the stack under the raised blind, or leaving it: flat
-  /// metal on flat metal, duller.
+  /// A slat joining the stack under the raised blind, or leaving it: a soft,
+  /// muffled knock - raising and lowering read as too clicky with more.
   stack() {
-    this.strike({ level: 0.06, pitch: 0.75 + Math.random() * 0.15, ring: 0.035, tone: 0.35, knock: 0.35,
+    this.strike({ level: 0.022, pitch: 0.5 + Math.random() * 0.12, ring: 0.012, tone: 0.12, knock: 0.6,
                   pan: (Math.random() - 0.5) * 0.4 });
   }
 
   /// A pull taken in hand: a small, dull plastic tock.
   grab() { this.strike({ level: 0.05, pitch: 0.45, ring: 0.015, tone: 0.15, knock: 0.5, pan: 0.3 }); }
 
-  /// Slats turning, radians a second. While a hand drags a cord the tilt
-  /// squeaks - louder and a little higher the faster it goes, catching and
-  /// slipping - with a few dry ticks of slats on rungs. Let go, it stops at
-  /// once: slats coasting on make no sound until they hit an end.
+  /// Slats turning, radians a second. While the blind is being opened or
+  /// shut - a hand on a cord, or a double tap - the tilt squeaks, louder and a
+  /// little higher the faster it goes, catching and slipping, with a few dry
+  /// ticks of slats on rungs. Let go mid-drag, it stops at once: slats
+  /// coasting on make no sound until they hit an end.
   turning(speed, dt, dragging) {
     if (!this.live) return;
     const now = this.ctx.currentTime;
     const v = dragging ? Math.min(speed / 2, 1) : 0;
     const catching = v > 0 ? 0.6 + Math.random() * 0.8 : 0;
-    this.squeakGain.gain.setTargetAtTime(0.22 * v * catching, now, v > 0 ? 0.03 : 0.04);
+    this.squeakGain.gain.setTargetAtTime(0.45 * v * catching, now, v > 0 ? 0.03 : 0.04);
     const f = 820 + 360 * v + (Math.random() - 0.5) * 60;
     this.squeakTone.frequency.setTargetAtTime(f, now, 0.02);
     this.squeakBand.frequency.setTargetAtTime(f * 2.3, now, 0.05);

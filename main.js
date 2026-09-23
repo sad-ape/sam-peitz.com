@@ -309,6 +309,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) close
 
 const drags = new Map();
 let lastTap = { t: -1e9, x: 0, y: 0 };
+let toggling = false;
 // fingers that went down together, for the three-finger tap
 let touchGroup = null;
 // fingers on the print, in the order they landed; the first one drags it
@@ -415,6 +416,7 @@ function finish(e, cancelled) {
   if (tap) {
     if (e.timeStamp - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
       model.toggleOpen();
+      toggling = true;                  // opened or shut by the mechanism: it squeaks
       lastTap.t = -1e9;
     } else {
       lastTap = { t: e.timeStamp, x: e.clientX, y: e.clientY };
@@ -623,7 +625,8 @@ function frame(now) {
   // what the hand does to the blind, heard: slats ticking as they turn, a
   // clack at either end, a click as a let-go slat lands, the stack, the cord
   const turn = Math.abs(model.tilt - tiltBefore) / Math.max(dt, 1e-3);
-  sound.turning(turn, Math.min(dt, 0.1), [...drags.values()].some(d => d.grip === 'tilt'));
+  if (toggling && model.tiltVel === 0) toggling = false;
+  sound.turning(turn, Math.min(dt, 0.1), toggling || [...drags.values()].some(d => d.grip === 'tilt'));
   const lim = Config.tiltLimit;
   if ((model.tilt <= 0 && tiltBefore > 0) || (model.tilt >= lim && tiltBefore < lim)) {
     sound.clack(Math.min(turn / 3, 1), model.tilt >= lim);

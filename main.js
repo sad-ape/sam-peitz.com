@@ -623,7 +623,7 @@ function frame(now) {
   // what the hand does to the blind, heard: slats ticking as they turn, a
   // clack at either end, a click as a let-go slat lands, the stack, the cord
   const turn = Math.abs(model.tilt - tiltBefore) / Math.max(dt, 1e-3);
-  sound.turning(turn, Math.min(dt, 0.1));
+  sound.turning(turn, Math.min(dt, 0.1), [...drags.values()].some(d => d.grip === 'tilt'));
   const lim = Config.tiltLimit;
   if ((model.tilt <= 0 && tiltBefore > 0) || (model.tilt >= lim && tiltBefore < lim)) {
     sound.clack(Math.min(turn / 3, 1), model.tilt >= lim);

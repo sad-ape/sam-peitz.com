@@ -23,7 +23,6 @@ const GLIDE = 2 * Math.PI / 0.6;
 
 const canvas = document.getElementById('blind');
 const page = document.getElementById('page');
-const hint = document.getElementById('hint');
 const photo = document.getElementById('photo');
 const video = document.getElementById('camera');
 const closeButton = document.getElementById('close');
@@ -39,7 +38,6 @@ try {
 } catch (error) {
   console.warn('No blind, just the page:', error);
   document.body.classList.remove('veiled');
-  hint.remove();
 }
 
 // ---------------------------------------------------------------- the page
@@ -311,6 +309,9 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) close
 const drags = new Map();
 let lastTap = { t: -1e9, x: 0, y: 0 };
 let toggling = false;
+/// The tilt as the last frame left it. A hand on a cord turns the slats
+/// between frames, so a frame measures from here, not from its own step.
+let tiltBefore = model.tilt;
 // fingers that went down together, for the three-finger tap
 let touchGroup = null;
 // fingers on the print, in the order they landed; the first one drags it
@@ -334,12 +335,8 @@ function onPrint(e) {
   return !!photo && !stream && document.elementsFromPoint(e.clientX, e.clientY).includes(photo);
 }
 
-function hideHint() { hint.classList.add('gone'); }
-setTimeout(hideHint, 6000);
-
 canvas.addEventListener('pointerdown', e => {
   try { canvas.setPointerCapture(e.pointerId); } catch {}   // a pointer already gone
-  hideHint();
   const w = world(e);
   const d = { grip: 'tilt', index: -1, startWorldY: w.y, lastY: w.sy, lastT: e.timeStamp,
               velocity: 0, moved: 0, touch: e.pointerType === 'touch' };
@@ -619,7 +616,6 @@ function frame(now) {
   if (!renderer) return;
   const dt = Math.max(now - last, 0) / 1000;
   const moving = !model.atRest;
-  const tiltBefore = model.tilt;
   model.step(dt);
   last = now;
 
@@ -636,6 +632,7 @@ function frame(now) {
   if (snap > 0.05) sound.snap(snap);
   if (model.takeStackClick()) sound.stack();
   sound.cord(model.liftVel);
+  tiltBefore = model.tilt;
 
   // the first time the blind is up past "using technology as a tool", its
   // asterisks sparkle in, and then they stay

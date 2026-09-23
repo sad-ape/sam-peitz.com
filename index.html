@@ -23,22 +23,6 @@
   }
   /* the page waits under the blind's first frame */
   .veiled #page { visibility: hidden; }
-  #hint {
-    position: fixed;
-    left: 50%;
-    bottom: calc(52px + env(safe-area-inset-bottom));     /* above the time slider */
-    transform: translateX(-50%);
-    padding: 9px 16px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.34);
-    color: rgba(255, 255, 255, 0.82);
-    font: 500 13px ui-rounded, system-ui, -apple-system, sans-serif;
-    white-space: pre;
-    pointer-events: none;
-    transition: opacity 0.6s ease-out;
-  }
-  #hint.gone { opacity: 0; }
-  .veiled #hint { visibility: hidden; }
   /* Sam's print, as in someday.soon's welcome: main.js places and sizes it */
   #photo {
     position: fixed;
@@ -143,7 +127,7 @@
   #sound:focus-visible { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
   .veiled #sound, .camera #sound { visibility: hidden; }
 </style>
-<noscript><style>.veiled #page { visibility: visible; } #hint { display: none; }</style></noscript>
+<noscript><style>.veiled #page { visibility: visible; }</style></noscript>
 </head>
 <body class="veiled">
 
@@ -186,7 +170,6 @@
 <video id="camera" playsinline muted autoplay></video>
 
 <canvas id="blind" aria-hidden="true"></canvas>
-<div id="hint" aria-hidden="true">pull a cord to open  ·  push a slat to peek</div>
 <button id="close" type="button">close camera</button>
 <input id="time" type="range" min="0" max="1000" aria-label="time of day, midnight to midnight">
 <button id="sound" type="button" class="off" aria-pressed="false" aria-label="sound"></button>

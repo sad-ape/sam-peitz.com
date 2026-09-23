@@ -23,6 +23,7 @@ export class Soundscape {
     this.day = 1;        // 0 night .. 1 day: birds only by day
     this.wind = 0.45;    // how windy: breeze blows harder
     this.rattle = 0;     // ticks owed to turning slats
+    this.spin = 0;       // how fast the slats have lately been turned, radians a second
   }
 
   /// On a touch or key, and when the speaker turns it on: starts it the
@@ -320,9 +321,14 @@ export class Soundscape {
   turning(speed, dt, dragging) {
     if (!this.live) return;
     const now = this.ctx.currentTime;
-    const v = dragging ? Math.min(speed / 2, 1) : 0;
-    const catching = v > 0 ? 0.6 + Math.random() * 0.8 : 0;
-    this.squeakGain.gain.setTargetAtTime(0.45 * v * catching, now, v > 0 ? 0.03 : 0.04);
+    // a hand moves in fits and starts, with frames where it hasn't moved at
+    // all: held for a moment, so the squeak runs through them unbroken
+    this.spin = Math.max(speed, this.spin * Math.exp(-dt / 0.04));
+    const v = dragging ? Math.min(this.spin / 2, 1) : 0;
+    const turned = dragging ? Math.min(this.spin / 0.15, 1) : 0;
+    // even a slow turn squeaks - a little louder the faster
+    const catching = 0.6 + Math.random() * 0.8;
+    this.squeakGain.gain.setTargetAtTime(0.28 * turned * (0.45 + 0.55 * v) * catching, now, turned > 0 ? 0.03 : 0.04);
     const f = 820 + 360 * v + (Math.random() - 0.5) * 60;
     this.squeakTone.frequency.setTargetAtTime(f, now, 0.02);
     this.squeakBand.frequency.setTargetAtTime(f * 2.3, now, 0.05);

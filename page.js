@@ -14,7 +14,9 @@ const MIN_CHARS = 5;                // no "for" or "tech" left on a line alone
 const MIN_GAP = 50;                 // between groups, so they never run together
 /// Where the print lies when the page opens, in mock pixels, whatever the
 /// screen: lines at these heights keep to its left so none start under it.
-const PRINT = { left: 280, top: 470, bottom: 812 };
+/// Tilted six degrees, its top left corner reaches left to 278 and its top
+/// edge up to 463, so the zone starts a little left of and above both.
+const PRINT = { left: 268, top: 455, bottom: 812 };
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const width = line => line.reduce((n, t) => n + t.text.length, 0) + line.length - 1;

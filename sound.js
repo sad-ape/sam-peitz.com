@@ -15,6 +15,9 @@ const METAL = [1, 1.41, 1.93, 2.57, 3.18];
 /// How loud: the scene far back, the blind close but quiet - twice what they
 /// first were, which on a phone came out too quiet.
 const FAR = 1.4, NEAR = 1;
+/// The tilt's squeak, at its loudest: a little one, about 14 dB under the one
+/// Sam found far too much.
+const SQUEAK = 0.025;
 
 export class Soundscape {
   constructor() {
@@ -124,17 +127,18 @@ export class Soundscape {
   }
 
   /// What the hand makes: the tilt squeaking while a cord is dragged - a
-  /// buzzy tone through a bright band, its level fluttering as it catches
-  /// and slips - and the lift cord running through the rail.
+  /// thin, high tone, its level fluttering as it catches and slips (a buzzy
+  /// one an octave lower was far too much) - and the lift cord running
+  /// through the rail.
   buildHands() {
     const ctx = this.ctx;
     this.squeakTone = ctx.createOscillator();
-    this.squeakTone.type = 'sawtooth';
-    this.squeakTone.frequency.value = 900;
+    this.squeakTone.type = 'triangle';
+    this.squeakTone.frequency.value = 2000;
     this.squeakBand = ctx.createBiquadFilter();
     this.squeakBand.type = 'bandpass';
-    this.squeakBand.frequency.value = 2000;
-    this.squeakBand.Q.value = 2.2;
+    this.squeakBand.frequency.value = 2400;
+    this.squeakBand.Q.value = 1.4;
     this.squeakGain = ctx.createGain();
     this.squeakGain.gain.value = 0;
     const flutter = ctx.createGain(), wobble = ctx.createOscillator(), depth = ctx.createGain();
@@ -328,10 +332,10 @@ export class Soundscape {
     const turned = dragging ? Math.min(this.spin / 0.15, 1) : 0;
     // even a slow turn squeaks - a little louder the faster
     const catching = 0.6 + Math.random() * 0.8;
-    this.squeakGain.gain.setTargetAtTime(0.28 * turned * (0.45 + 0.55 * v) * catching, now, turned > 0 ? 0.03 : 0.04);
-    const f = 820 + 360 * v + (Math.random() - 0.5) * 60;
+    this.squeakGain.gain.setTargetAtTime(SQUEAK * turned * (0.45 + 0.55 * v) * catching, now, turned > 0 ? 0.03 : 0.04);
+    const f = 1900 + 500 * v + (Math.random() - 0.5) * 90;
     this.squeakTone.frequency.setTargetAtTime(f, now, 0.02);
-    this.squeakBand.frequency.setTargetAtTime(f * 2.3, now, 0.05);
+    this.squeakBand.frequency.setTargetAtTime(f * 1.2, now, 0.05);
     if (!dragging) return;
     this.rattle += speed * dt * 25;
     let n = 0;

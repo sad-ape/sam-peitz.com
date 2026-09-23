@@ -11,8 +11,9 @@ const PARTIALS = [[1, 1, 3.2], [2.76, 0.45, 1.8], [5.40, 0.22, 0.9], [8.93, 0.10
 /// almost at once: what it gives is a dry crack with a hint of metal in it,
 /// not a note. A clear sine at one pitch read as a toy.
 const METAL = [1, 1.41, 1.93, 2.57, 3.18];
-/// How loud: the scene far back, the blind close but quiet.
-const FAR = 0.7, NEAR = 0.5;
+/// How loud: the scene far back, the blind close but quiet - twice what they
+/// first were, which on a phone came out too quiet.
+const FAR = 1.4, NEAR = 1;
 
 export class Soundscape {
   constructor() {
@@ -184,7 +185,7 @@ export class Soundscape {
     const ctx = this.ctx;
     const f = CHIME[Math.floor(Math.random() * CHIME.length)];
     const out = this.panned((Math.random() - 0.5) * 1.2, this.far, this.room);
-    out.gain.value = 0.035 * (0.5 + Math.random() * 0.5);
+    out.gain.value = 0.012 * (0.5 + Math.random() * 0.5);     // kept back: they stood out
     for (const [ratio, level, decay] of PARTIALS) {
       tone(ctx, out, f * ratio * (1 + (Math.random() - 0.5) * 0.004), level, at, 0.003, decay);
     }

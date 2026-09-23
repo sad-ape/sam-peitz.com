@@ -408,7 +408,7 @@ function finish(e, cancelled) {
   switch (d.grip) {
     case 'bend': model.endBend(d.index); break;
     case 'tilt': model.flingTilt(Math.min(Math.max(d.velocity, -2600), 2600)); break;
-    case 'lift': model.endLift(d.index); break;     // the cord lock holds the blind
+    case 'lift': model.endLift(d.index); sound.lock(); break;     // the cord lock holds the blind
     case 'print': releasePrint(e, cancelled); break;
     case 'none': if (tap) tapPage(e.clientX, e.clientY); break;
   }
@@ -625,7 +625,9 @@ function frame(now) {
   const turn = Math.abs(model.tilt - tiltBefore) / Math.max(dt, 1e-3);
   sound.turning(turn, Math.min(dt, 0.1));
   const lim = Config.tiltLimit;
-  if ((model.tilt <= 0 && tiltBefore > 0) || (model.tilt >= lim && tiltBefore < lim)) sound.clack(Math.min(turn / 3, 1));
+  if ((model.tilt <= 0 && tiltBefore > 0) || (model.tilt >= lim && tiltBefore < lim)) {
+    sound.clack(Math.min(turn / 3, 1), model.tilt >= lim);
+  }
   const snap = model.takeSnapImpulse();
   if (snap > 0.05) sound.snap(snap);
   if (model.takeStackClick()) sound.stack();

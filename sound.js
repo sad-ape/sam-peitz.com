@@ -79,6 +79,7 @@ export class Soundscape {
 
     this.noise = pinkNoise(ctx, 12);
     this.click = clickNoise(ctx);
+    this.crackle = crackleNoise(ctx, 2.3);
     this.buildWind();
     this.buildHands();
     this.gusts();
@@ -112,22 +113,25 @@ export class Soundscape {
     low.connect(this.whistle).connect(this.whistleGain).connect(this.far);
   }
 
-  /// The beds under the hand: slats brushing past each other as they turn,
-  /// and the lift cord running through the rail.
+  /// The beds under the hand. Turning slats rustle: a crackle of many tiny
+  /// metal contacts - the sound of real blinds being tilted - over a little
+  /// smooth brushing. The lift cord rasps through the rail: rougher, lower.
   buildHands() {
     const ctx = this.ctx;
-    const bed = (freq, q) => {
+    const bed = (buffer, freq, q) => {
       const f = ctx.createBiquadFilter();
       f.type = 'bandpass';
       f.frequency.value = freq;
       f.Q.value = q;
       const g = ctx.createGain();
       g.gain.value = 0;
-      loop(ctx, this.noise).connect(f).connect(g).connect(this.near);
+      loop(ctx, buffer).connect(f).connect(g).connect(this.near);
       return g;
     };
-    this.brush = bed(3200, 0.8);
-    this.rub = bed(2300, 1.6);
+    this.brush = bed(this.noise, 3200, 0.8);
+    this.rustle = bed(this.crackle, 4200, 0.7);
+    this.rub = bed(this.noise, 2300, 1.6);
+    this.rasp = bed(this.crackle, 1900, 1.1);
   }
 
   /// Every sixth of a second the wind picks where it's heading - quick and
@@ -250,22 +254,35 @@ export class Soundscape {
     this.strike({ level: 0.06 + 0.12 * strength, pitch: 0.95, ring: 0.035, tone: 0.35, knock: 0.25 });
   }
 
-  /// Turned as far as it goes, open or shut: every slat stops against its
-  /// rungs within a few hundredths of a second, a short scatter of knocks.
-  clack(strength) {
+  /// Turned as far as it goes. Shut, the slats land on one another one after
+  /// the next down the blind - a quick cascade of clacks, fading as it runs
+  /// down; wide open they only stop against their rungs, a shorter one.
+  clack(strength, shut = true) {
     if (!this.live) return;
-    const now = this.ctx.currentTime, n = 3 + Math.floor(Math.random() * 4);
+    const now = this.ctx.currentTime;
+    const n = (shut ? 8 : 4) + Math.floor(Math.random() * (shut ? 6 : 3));
+    const span = (shut ? 0.12 : 0.06) + Math.random() * 0.06;
     for (let i = 0; i < n; i++) {
-      this.strike({ level: (0.03 + 0.06 * strength) * (0.6 + Math.random() * 0.4), pitch: 0.75 + Math.random() * 0.35,
-                    ring: 0.025, tone: 0.3, knock: 0.35, when: now + Math.random() * 0.04,
-                    pan: (Math.random() - 0.5) * 1.2 });
+      const f = i / n;
+      this.strike({ level: (0.03 + 0.07 * strength) * (1 - 0.6 * f) * (0.6 + Math.random() * 0.4),
+                    pitch: 0.75 + Math.random() * 0.4, ring: 0.045, tone: 0.4, knock: 0.3,
+                    when: now + span * f + Math.random() * 0.008, pan: (Math.random() - 0.5) * 1.2 });
     }
+  }
+
+  /// The cord lock catching as a pull is let go: a small ratchet, two clicks.
+  lock() {
+    if (!this.live) return;
+    const now = this.ctx.currentTime;
+    this.strike({ level: 0.05, pitch: 0.6, ring: 0.012, tone: 0.2, knock: 0.4, pan: 0.3 });
+    this.strike({ level: 0.03, pitch: 0.65, ring: 0.01, tone: 0.2, knock: 0.3, when: now + 0.018, pan: 0.3 });
   }
 
   /// A slat joining the stack under the raised blind, or leaving it: flat
   /// metal on flat metal, duller.
   stack() {
-    this.strike({ level: 0.045, pitch: 0.7, ring: 0.02, tone: 0.25, knock: 0.3, pan: (Math.random() - 0.5) * 0.4 });
+    this.strike({ level: 0.06, pitch: 0.75 + Math.random() * 0.15, ring: 0.035, tone: 0.35, knock: 0.35,
+                  pan: (Math.random() - 0.5) * 0.4 });
   }
 
   /// A pull taken in hand: a small, dull plastic tock.
@@ -277,7 +294,9 @@ export class Soundscape {
   turning(speed, dt) {
     if (!this.live) return;
     const now = this.ctx.currentTime, v = Math.min(speed / 3, 1);
-    this.brush.gain.setTargetAtTime(Math.min(speed / 4, 1) * 0.02 * (0.55 + Math.random() * 0.9), now, 0.02);
+    const flutter = 0.55 + Math.random() * 0.9;
+    this.brush.gain.setTargetAtTime(Math.min(speed / 4, 1) * 0.012 * flutter, now, 0.02);
+    this.rustle.gain.setTargetAtTime(Math.min(speed / 2.5, 1) * 0.09 * flutter, now, 0.02);
     // and now and then the tilt squeaks, the faster it turns the likelier
     if (speed > 0.25 && now > (this.squeakUntil ?? 0) && Math.random() < Math.min(speed, 3) * dt * 0.9) this.squeak(speed);
     this.rattle += speed * dt * 60;
@@ -332,8 +351,9 @@ export class Soundscape {
   /// rub with the grain of the cord in it.
   cord(speed) {
     if (!this.live) return;
-    const level = Math.min(Math.abs(speed) / 900, 1) * 0.03 * (0.6 + Math.random() * 0.8);
-    this.rub.gain.setTargetAtTime(level, this.ctx.currentTime, 0.02);
+    const v = Math.min(Math.abs(speed) / 900, 1) * (0.6 + Math.random() * 0.8);
+    this.rub.gain.setTargetAtTime(0.02 * v, this.ctx.currentTime, 0.02);
+    this.rasp.gain.setTargetAtTime(0.07 * v, this.ctx.currentTime, 0.02);
   }
 
   /// A gain on its way to `to` (and `also`), panned left or right.
@@ -397,6 +417,25 @@ function pinkNoise(ctx, seconds) {
     for (let i = 0; i < fade; i++) {
       const w = i / fade;
       d[i] = x[i] * Math.sqrt(w) + x[len + i] * Math.sqrt(1 - w);
+    }
+  }
+  return buf;
+}
+
+/// Crackle: tiny metal contacts at random, a few hundred a second, each a
+/// burst of noise a few milliseconds long - most faint, some not. Loops
+/// without a seam, being made of separate specks.
+function crackleNoise(ctx, seconds) {
+  const sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+  const buf = ctx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let t = 0;
+    while (true) {
+      t += Math.floor(-Math.log(1 - Math.random()) * sr / 380);
+      if (t >= len) break;
+      const amp = Math.random() ** 2.5, decay = (0.0015 + Math.random() * 0.0035) * sr;
+      for (let k = 0; k < decay * 4 && t + k < len; k++) d[t + k] += amp * (Math.random() * 2 - 1) * Math.exp(-k / decay);
     }
   }
   return buf;

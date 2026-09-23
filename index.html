@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sam Peitz</title>
+<meta name="description" content="hey i’m Sam. i design and build things like One Year, making things for humans like myself, using technology as a tool, not a life-substitute.">
+<style>
+  :root { --paper: #F0F5F5; --ink: #121212; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); }
+  #page, #blind { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; height: 100dvh; }
+  #page {
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 18.55px;
+    fill: var(--ink);
+  }
+  #blind {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* the page waits under the blind's first frame */
+  .veiled #page { visibility: hidden; }
+  #hint {
+    position: fixed;
+    left: 50%;
+    bottom: calc(52px + env(safe-area-inset-bottom));     /* above the time slider */
+    transform: translateX(-50%);
+    padding: 9px 16px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.34);
+    color: rgba(255, 255, 255, 0.82);
+    font: 500 13px ui-rounded, system-ui, -apple-system, sans-serif;
+    white-space: pre;
+    pointer-events: none;
+    transition: opacity 0.6s ease-out;
+  }
+  #hint.gone { opacity: 0; }
+  .veiled #hint { visibility: hidden; }
+  /* Sam's print, as in someday.soon's welcome: main.js places and sizes it */
+  #photo {
+    position: fixed;
+    left: 0;
+    top: 0;
+    object-fit: cover;
+    -webkit-user-drag: none;
+  }
+  .veiled #photo, .camera #photo { visibility: hidden; }
+  /* the selfie camera, behind the blind instead of the page */
+  #camera {
+    display: none;
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    object-fit: cover;
+    background: #000;
+  }
+  .camera #camera { display: block; }
+  #close {
+    display: none;
+    position: fixed;
+    left: 50%;
+    bottom: calc(34px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    padding: 12px 20px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.34);
+    color: rgba(255, 255, 255, 0.82);
+    font: 500 13px ui-rounded, system-ui, -apple-system, sans-serif;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .camera #close { display: block; }
+  /* the time of day, midnight to midnight: a hairline in a small pill */
+  #time {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: 132px;
+    height: 26px;
+    margin: 0;
+    padding: 0 8px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.34);
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #time::-webkit-slider-runnable-track {
+    height: 26px;
+    background: linear-gradient(rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.35)) center / 100% 1px no-repeat;
+  }
+  #time::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+  #time::-moz-range-track {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.35);
+  }
+  #time::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+  .veiled #time, .camera #time { visibility: hidden; }
+  /* a quiet ring for the keyboard, not the browser's blue one */
+  #time:focus { outline: none; }
+  #time:focus-visible { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
+  /* the soundscape's switch, beside the slider */
+  #sound {
+    position: fixed;
+    left: calc(50% + 74px);
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.34) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 6h3l4-3v10l-4-3H2z' fill='white' fill-opacity='.9'/%3E%3Cpath d='M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4' fill='none' stroke='white' stroke-opacity='.9' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #sound.off { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 6h3l4-3v10l-4-3H2z' fill='white' fill-opacity='.9'/%3E%3Cpath d='M11 6l4 4M15 6l-4 4' stroke='white' stroke-opacity='.9' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E"); }
+  #sound:focus { outline: none; }
+  #sound:focus-visible { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
+  .veiled #sound, .camera #sound { visibility: hidden; }
+</style>
+<noscript><style>.veiled #page { visibility: visible; } #hint { display: none; }</style></noscript>
+</head>
+<body class="veiled">
+
+<!-- Sam's page, as he drew it: every line placed by hand in his mock's pixels
+     (x where the line starts, y its baseline). The words, places and colours
+     are the same as Sources/App/PageDesign.swift. Underlined words are <a>. -->
+<svg id="page" viewBox="0 0 573.5 953.6" preserveAspectRatio="xMidYMin meet" xmlns="http://www.w3.org/2000/svg">
+  <g class="group">
+    <text x="69.0" y="90.7">hey i’m Sam</text>
+  </g>
+  <g class="group">
+    <text x="345.6" y="198.9">i design and</text>
+    <text x="220.7" y="231.9">build things like <a href="https://apps.apple.com/us/app/one-year-daily-journal/id6740510762" target="_blank" rel="noopener">One Year</a></text>
+  </g>
+  <g class="group">
+    <text x="167.9" y="337.0">making things for <a id="humans">humans</a></text>
+    <text x="167.7" y="360.4">like myself</text>
+  </g>
+  <g class="group">
+    <text x="233.7" y="463.3">*</text>
+    <text x="284.7" y="486.6">*</text>
+    <text x="376.7" y="497.9">*</text>
+    <text x="186.2" y="526.4">using technology as a tool</text>
+    <text x="233.3" y="562.6">*</text>
+    <text x="442.1" y="566.6">*</text>
+    <text x="220.3" y="593.3">*</text>
+    <text x="342.0" y="604.6">*</text>
+  </g>
+  <g class="group">
+    <text x="92.1" y="704.1">not a life-substitute.</text>
+  </g>
+  <g class="group">
+    <text x="245.3" y="854.8"><a href="https://x.com/samdape" target="_blank" rel="noopener">X</a></text>
+    <text x="281.0" y="854.8"><a href="https://www.linkedin.com/in/samuel-peitz/" target="_blank" rel="noopener">L</a></text>
+    <text x="316.8" y="854.8"><a href="https://www.instagram.com/oneyearapp/" target="_blank" rel="noopener">I</a></text>
+  </g>
+</svg>
+
+<img id="photo" src="sam.jpg" alt="Sam on a beach">
+<video id="camera" playsinline muted autoplay></video>
+
+<canvas id="blind" aria-hidden="true"></canvas>
+<div id="hint" aria-hidden="true">pull a cord to open  ·  push a slat to peek</div>
+<button id="close" type="button">close camera</button>
+<input id="time" type="range" min="0" max="1000" aria-label="time of day, midnight to midnight">
+<button id="sound" type="button" aria-pressed="true" aria-label="sound"></button>
+
+<script type="module" src="main.js"></script>
+<!-- if the blind never arrives (a browser too old for it), show the page anyway -->
+<script>setTimeout(function () { document.body.classList.remove('veiled'); }, 4000);</script>
+</body>
+</html>

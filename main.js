@@ -225,9 +225,11 @@ function pageColours(n) {
   return { paper, ink };
 }
 
-/// Wind, chimes and birds, far in the back: on from the start, sounding as
-/// soon as the browser allows - the first touch, click or key. After that a
-/// touch or a key wakes it if the browser put it to sleep.
+/// Wind, chimes and birds, far in the back. On a computer it's on from the
+/// start, sounding as soon as the browser allows - the first click or key at
+/// the latest. On a phone it starts off, until the speaker is pressed: there
+/// it stayed silent under a speaker showing on, even after a touch. Once
+/// going, a touch or a key wakes it if the browser put it to sleep.
 const sound = new Soundscape();
 // iOS Safari only counts the end of a touch, or a tap, as leave to start sound
 for (const type of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) {
@@ -242,8 +244,11 @@ soundButton?.addEventListener('click', () => {
   sound.setOn(!sound.on);
   showSound();
 });
-// a computer may let it start straight away; a phone waits for a touch
-if (matchMedia('(hover: hover) and (pointer: fine)').matches) sound.wake(true);
+if (matchMedia('(hover: hover) and (pointer: fine)').matches) {    // a mouse or trackpad
+  sound.on = true;
+  sound.wake(true);                                                // it may even start straight away
+}
+showSound();
 document.addEventListener('visibilitychange', () => sound.pause(document.hidden));
 
 /// A few faint clouds always go over, day and night, drifting slowly one way

@@ -89,14 +89,18 @@
         rgba(255, 255, 255, 0.35) 0) center / 100% 1px no-repeat;
   }
   /* the slider's own thumb is there to be dragged, but not seen: #knob is
-     drawn over it */
+     drawn over it. Invisible outright - left merely unpainted, iOS still gave
+     it a square with a shadow. */
   #time::-webkit-slider-thumb {
     -webkit-appearance: none;
+    appearance: none;
     width: 20px;
     height: 20px;
     margin-top: 3px;
     border: 0;
     background: none;
+    box-shadow: none;
+    opacity: 0;
   }
   #time::-moz-range-track {
     height: 1px;
@@ -110,6 +114,8 @@
     height: 20px;
     border: 0;
     background: none;
+    box-shadow: none;
+    opacity: 0;
   }
   /* the knob: a white sun by day, the moon by night, turning from one into
      the other (main.js draws it), exactly over the thumb */

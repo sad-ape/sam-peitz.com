@@ -225,19 +225,29 @@ function pageColours(n) {
   return { paper, ink };
 }
 
-/// Wind, chimes and birds, far in the back. Off until the speaker turns it
-/// on; after that a touch or a key wakes it if the browser put it to sleep.
+/// Wind, chimes and birds, far in the back. On a computer it's on from the
+/// start, sounding as soon as the browser allows (the first click or key at
+/// the latest); on a phone it waits for the speaker (opened from X, it sat
+/// silent under a speaker showing on). After that a touch or a key wakes it
+/// if the browser put it to sleep.
 const sound = new Soundscape();
 // iOS Safari only counts the end of a touch, or a tap, as leave to start sound
 for (const type of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) {
   window.addEventListener(type, () => sound.wake(), { capture: true, passive: true });
 }
 const soundButton = document.getElementById('sound');
+function showSound() {
+  soundButton?.classList.toggle('off', !sound.on);
+  soundButton?.setAttribute('aria-pressed', String(sound.on));
+}
 soundButton?.addEventListener('click', () => {
   sound.setOn(!sound.on);
-  soundButton.classList.toggle('off', !sound.on);
-  soundButton.setAttribute('aria-pressed', String(sound.on));
+  showSound();
 });
+if (matchMedia('(hover: hover) and (pointer: fine)').matches) {    // a mouse or trackpad
+  sound.setOn(true);
+  showSound();
+}
 document.addEventListener('visibilitychange', () => sound.pause(document.hidden));
 
 /// A few faint clouds always go over, day and night, drifting slowly one way
@@ -271,6 +281,10 @@ function applySky(t) {
 /// (settle), so a jump across the day fades rather than cuts.
 const hhmm = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 let skyNow = 0, skyGoal = 0;
+/// On opening, the slider runs from midnight up to the visitor's own time,
+/// so the light is seen changing from the start: where to, for how long, and
+/// when it set off (once the page shows).
+let intro = null;
 function setTime() {
   const minutes = Number(slider.value);
   const text = hhmm.format(new Date(2000, 0, 1, Math.floor(minutes / 60) % 24, minutes % 60)).toLowerCase();
@@ -318,12 +332,20 @@ function drawKnob(m) {
   document.documentElement.style.setProperty('--gap', `${(Math.max(outer + 0.7, r) + 3).toFixed(1)}px`);
 }
 
-/// Each frame: the light a step nearer the slider, the knob a step nearer
-/// the sun or the moon.
+/// Each frame: the opening run of the slider, the light a step nearer the
+/// slider, the knob a step nearer the sun or the moon.
 let settledAt = 0;
 function settle(now) {
   const dt = Math.min(Math.max(now - settledAt, 0) / 1000, 0.1);
   settledAt = now;
+  if (intro && !document.body.classList.contains('veiled')) {
+    intro.start ??= now + 400;                                // a moment at midnight first
+    const p = Math.min(Math.max((now - intro.start) / 1000 / intro.duration, 0), 1);
+    const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(2 - 2 * p, 3) / 2;   // easing in and out
+    slider.value = Math.round(intro.to * e);
+    setTime();
+    if (p === 1) intro = null;
+  }
   if (skyNow !== skyGoal) {
     skyNow += (skyGoal - skyNow) * (1 - Math.exp(-dt / 0.12));
     if (Math.abs(skyGoal - skyNow) < 2e-4) skyNow = skyGoal;
@@ -336,15 +358,24 @@ function settle(now) {
   }
 }
 
-// it opens at the visitor's own time of day, the knob already the sun or the moon
+// it opens at midnight and runs to the visitor's own time - or starts there
+// for anyone who'd rather things didn't move - and a hand on the slider
+// takes over at once
 const clock = new Date();
-slider.value = clock.getHours() * 60 + clock.getMinutes();
+const minutesNow = clock.getHours() * 60 + clock.getMinutes();
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  intro = { to: minutesNow, duration: 1.2 + 2.4 * minutesNow / 1440, start: null };
+}
+slider.value = intro ? 0 : minutesNow;
 setTime();
 skyNow = skyGoal;
 applySky(skyNow);
 knobPhase = knobGoal;
 drawKnob(knobPhase);
-slider.addEventListener('input', setTime);
+slider.addEventListener('input', () => {
+  intro = null;
+  setTime();
+});
 
 // ----------------------------------------------------------------- camera
 

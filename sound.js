@@ -2,9 +2,10 @@
 // the back: wind that comes and goes, wind chimes it knocks together, birds
 // now and then by day. Close by: the blind itself - thin metal slats ticking
 // as they turn, clicking home when let go, a cord running through the rail -
-// the sounds the app gives as haptics. It starts off, until the speaker is
-// pressed: browsers allow sound only after a touch anyway, and a speaker
-// showing on over a silent page (X's in-app browser) read as broken.
+// the sounds the app gives as haptics. On a phone it starts off, until the
+// speaker is pressed: browsers allow sound only after a touch anyway, and a
+// speaker showing on over a silent page (X's in-app browser) read as broken.
+// On a computer main.js turns it on from the start.
 
 const CHIME = [880, 990, 1100, 1320, 1485, 1760];    // a pentatonic set, A5 to A6
 const PARTIALS = [[1, 1, 3.2], [2.76, 0.45, 1.8], [5.40, 0.22, 0.9], [8.93, 0.10, 0.5]];  // ratio, level, seconds
@@ -15,18 +16,19 @@ const METAL = [1, 1.41, 1.93, 2.57, 3.18];
 /// How loud: the scene far back, the blind close but quiet - twice what they
 /// first were, which on a phone came out too quiet.
 const FAR = 1.4, NEAR = 1;
-/// The tilt's squeak, at its loudest: a little one, about 14 dB under the one
-/// Sam found far too much.
-const SQUEAK = 0.025;
+/// The tilt's squeaks, at their loudest: slight - a steady buzz, then a steady
+/// whistle, were both too much.
+const SQUEAK = 0.02;
 
 export class Soundscape {
   constructor() {
     this.ctx = null;
-    this.on = false;     // until the speaker is pressed
+    this.on = false;     // until the speaker is pressed, or main.js on a computer
     this.day = 1;        // 0 night .. 1 day: birds only by day
     this.wind = 0.45;    // how windy: breeze blows harder
     this.rattle = 0;     // ticks owed to turning slats
     this.spin = 0;       // how fast the slats have lately been turned, radians a second
+    this.squeakUntil = 0; // when the next squeak may start
   }
 
   /// On a touch or key, and when the speaker turns it on: starts it the
@@ -35,7 +37,7 @@ export class Soundscape {
     if (!this.on) return;
     if (!this.ctx) this.build();
     if (this.ctx.state !== 'running') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});     // refused before a touch or a key: the next one tries again
       // iOS lets a page make sound only once something starts playing inside
       // a touch that has ended or a tap: a single silent sample does it
       const blip = this.ctx.createBufferSource();
@@ -126,29 +128,31 @@ export class Soundscape {
     low.connect(this.whistle).connect(this.whistleGain).connect(this.far);
   }
 
-  /// What the hand makes: the tilt squeaking while a cord is dragged - a
-  /// thin, high tone, its level fluttering as it catches and slips (a buzzy
-  /// one an octave lower was far too much) - and the lift cord running
-  /// through the rail.
+  /// What the hand makes: the tilt squeaking while a cord is dragged, like
+  /// metal louvres in a vent - a bright, rough tone, its pitch never quite
+  /// steady, sounded in short squeaks (squeak) - and the lift cord running
+  /// through the rail. (A steady tone read as a buzz, and higher and purer,
+  /// as a whistle.)
   buildHands() {
     const ctx = this.ctx;
     this.squeakTone = ctx.createOscillator();
-    this.squeakTone.type = 'triangle';
-    this.squeakTone.frequency.value = 2000;
+    this.squeakTone.type = 'sawtooth';
+    this.squeakTone.frequency.value = 2800;
+    // metal catching and slipping: the pitch shaken by a little noise
+    const shake = ctx.createBiquadFilter();
+    shake.type = 'lowpass';
+    shake.frequency.value = 500;
+    this.squeakShake = ctx.createGain();
+    this.squeakShake.gain.value = 0;
+    loop(ctx, this.noise).connect(shake).connect(this.squeakShake).connect(this.squeakTone.frequency);
     this.squeakBand = ctx.createBiquadFilter();
     this.squeakBand.type = 'bandpass';
-    this.squeakBand.frequency.value = 2400;
-    this.squeakBand.Q.value = 1.4;
+    this.squeakBand.frequency.value = 4200;
+    this.squeakBand.Q.value = 0.9;
     this.squeakGain = ctx.createGain();
     this.squeakGain.gain.value = 0;
-    const flutter = ctx.createGain(), wobble = ctx.createOscillator(), depth = ctx.createGain();
-    flutter.gain.value = 0.7;
-    wobble.frequency.value = 23;
-    depth.gain.value = 0.3;
-    wobble.connect(depth).connect(flutter.gain);
-    this.squeakTone.connect(this.squeakBand).connect(this.squeakGain).connect(flutter).connect(this.near);
+    this.squeakTone.connect(this.squeakBand).connect(this.squeakGain).connect(this.near);
     this.squeakTone.start();
-    wobble.start();
 
     const bed = (freq, q) => {
       const f = ctx.createBiquadFilter();
@@ -318,24 +322,18 @@ export class Soundscape {
   grab() { this.strike({ level: 0.05, pitch: 0.45, ring: 0.015, tone: 0.15, knock: 0.5, pan: 0.3 }); }
 
   /// Slats turning, radians a second. While the blind is being opened or
-  /// shut - a hand on a cord, or a double tap - the tilt squeaks, louder and a
-  /// little higher the faster it goes, catching and slipping, with a few dry
-  /// ticks of slats on rungs. Let go mid-drag, it stops at once: slats
-  /// coasting on make no sound until they hit an end.
+  /// shut - a hand on a cord, or a double tap - the tilt squeaks now and then,
+  /// more often, a little louder and higher the faster it goes, with a few
+  /// dry ticks of slats on rungs. Let go mid-drag, it stops: slats coasting
+  /// on make no sound until they hit an end.
   turning(speed, dt, dragging) {
     if (!this.live) return;
     const now = this.ctx.currentTime;
     // a hand moves in fits and starts, with frames where it hasn't moved at
-    // all: held for a moment, so the squeak runs through them unbroken
+    // all: held for a moment, so a steady turn reads as one
     this.spin = Math.max(speed, this.spin * Math.exp(-dt / 0.04));
     const v = dragging ? Math.min(this.spin / 2, 1) : 0;
-    const turned = dragging ? Math.min(this.spin / 0.15, 1) : 0;
-    // even a slow turn squeaks - a little louder the faster
-    const catching = 0.6 + Math.random() * 0.8;
-    this.squeakGain.gain.setTargetAtTime(SQUEAK * turned * (0.45 + 0.55 * v) * catching, now, turned > 0 ? 0.03 : 0.04);
-    const f = 1900 + 500 * v + (Math.random() - 0.5) * 90;
-    this.squeakTone.frequency.setTargetAtTime(f, now, 0.02);
-    this.squeakBand.frequency.setTargetAtTime(f * 1.2, now, 0.05);
+    if (dragging && this.spin > 0.1 && now >= this.squeakUntil) this.squeak(now, v);
     if (!dragging) return;
     this.rattle += speed * dt * 25;
     let n = 0;
@@ -345,6 +343,28 @@ export class Soundscape {
                     when: now + Math.random() * dt, pan: (Math.random() - 0.5) * 1.4 });
     }
     if (this.rattle > 1) this.rattle = 0;
+  }
+
+  /// One squeak of the tilt, `v` 0..1 how fast it turns: the metal catches,
+  /// its pitch slides up a little and back, and it lets go - then a pause,
+  /// shorter the faster the turn.
+  squeak(at, v) {
+    const length = 0.05 + 0.04 * v + Math.random() * 0.08;
+    const f = (2400 + 800 * v) * (0.9 + Math.random() * 0.2);
+    const level = SQUEAK * (0.5 + 0.5 * v) * (0.6 + Math.random() * 0.4);
+    const g = this.squeakGain.gain, pitch = this.squeakTone.frequency;
+    g.cancelScheduledValues(at);
+    pitch.cancelScheduledValues(at);
+    g.setValueAtTime(0, at);
+    g.linearRampToValueAtTime(level, at + 0.01);
+    g.linearRampToValueAtTime(level * 0.7, at + length * 0.75);
+    g.linearRampToValueAtTime(0, at + length);
+    pitch.setValueAtTime(f * 0.95, at);
+    pitch.linearRampToValueAtTime(f * (1.02 + Math.random() * 0.05), at + length * 0.6);
+    pitch.linearRampToValueAtTime(f * (0.96 + Math.random() * 0.03), at + length);
+    this.squeakBand.frequency.setValueAtTime(f * 1.5, at);
+    this.squeakShake.gain.setValueAtTime(f * 0.2, at);
+    this.squeakUntil = at + length + (0.28 - 0.2 * v) * (0.5 + Math.random());
   }
 
   /// The lift cord running through the rail, as fast as the blind moves: a

@@ -219,8 +219,8 @@ function pageColours(n) {
   return { paper, ink };
 }
 
-/// Wind, chimes and birds, far in the back. Browsers allow sound only after a
-/// touch or a key, so it wakes with the first; the speaker turns it off.
+/// Wind, chimes and birds, far in the back. Off until the speaker turns it
+/// on; after that a touch or a key wakes it if the browser put it to sleep.
 const sound = new Soundscape();
 // iOS Safari only counts the end of a touch, or a tap, as leave to start sound
 for (const type of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) {

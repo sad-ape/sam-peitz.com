@@ -222,8 +222,9 @@ function pageColours(n) {
 /// Wind, chimes and birds, far in the back. Browsers allow sound only after a
 /// touch or a key, so it wakes with the first; the speaker turns it off.
 const sound = new Soundscape();
-for (const type of ['pointerdown', 'pointerup', 'keydown']) {
-  window.addEventListener(type, () => sound.wake(), { capture: true });
+// iOS Safari only counts the end of a touch, or a tap, as leave to start sound
+for (const type of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) {
+  window.addEventListener(type, () => sound.wake(), { capture: true, passive: true });
 }
 const soundButton = document.getElementById('sound');
 soundButton?.addEventListener('click', () => {

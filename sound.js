@@ -28,7 +28,15 @@ export class Soundscape {
   wake() {
     if (!this.on) return;
     if (!this.ctx) this.build();
-    if (this.ctx.state !== 'running') this.ctx.resume();
+    if (this.ctx.state !== 'running') {
+      this.ctx.resume();
+      // iOS lets a page make sound only once something starts playing inside
+      // a touch that has ended or a tap: a single silent sample does it
+      const blip = this.ctx.createBufferSource();
+      blip.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+      blip.connect(this.ctx.destination);
+      blip.start();
+    }
   }
 
   setOn(on) {

@@ -2,10 +2,8 @@
 // the back: wind that comes and goes, wind chimes it knocks together, birds
 // now and then by day. Close by: the blind itself - thin metal slats ticking
 // as they turn, clicking home when let go, a cord running through the rail -
-// the sounds the app gives as haptics. On a phone it starts off, until the
-// speaker is pressed: browsers allow sound only after a touch anyway, and a
-// speaker showing on over a silent page (X's in-app browser) read as broken.
-// On a computer main.js turns it on from the start.
+// the sounds the app gives as haptics. It's on from the start, and sounds as
+// soon as the browser allows: the first touch, click or key.
 
 const CHIME = [880, 990, 1100, 1320, 1485, 1760];    // a pentatonic set, A5 to A6
 const PARTIALS = [[1, 1, 3.2], [2.76, 0.45, 1.8], [5.40, 0.22, 0.9], [8.93, 0.10, 0.5]];  // ratio, level, seconds
@@ -23,7 +21,7 @@ const SQUEAK = 0.02;
 export class Soundscape {
   constructor() {
     this.ctx = null;
-    this.on = false;     // until the speaker is pressed, or main.js on a computer
+    this.on = true;      // until the speaker turns it off
     this.day = 1;        // 0 night .. 1 day: birds only by day
     this.wind = 0.45;    // how windy: breeze blows harder
     this.rattle = 0;     // ticks owed to turning slats

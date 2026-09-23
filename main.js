@@ -243,7 +243,7 @@ soundButton?.addEventListener('click', () => {
   showSound();
 });
 // a computer may let it start straight away; a phone waits for a touch
-if (matchMedia('(hover: hover) and (pointer: fine)').matches) sound.wake();
+if (matchMedia('(hover: hover) and (pointer: fine)').matches) sound.wake(true);
 document.addEventListener('visibilitychange', () => sound.pause(document.hidden));
 
 /// A few faint clouds always go over, day and night, drifting slowly one way

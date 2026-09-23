@@ -29,20 +29,26 @@ export class Soundscape {
     this.squeakUntil = 0; // when the next squeak may start
   }
 
-  /// On a touch or key, and when the speaker turns it on: starts it the
-  /// first time, and wakes it later if the browser put it to sleep.
-  wake() {
+  /// On a touch, click or key, when the speaker turns it on, and once as the
+  /// page opens on a computer (`opening`), which may allow it: starts the
+  /// sound, or wakes it if the browser put it to sleep. Browsers count only
+  /// some of these as the visitor's own - the end of a touch, a click, a key,
+  /// not a finger going down - and sound set up outside one stayed silent on
+  /// iPhones (while the speaker, set up inside a tap, worked). So it is made
+  /// inside one, and until it is really playing, each one tries again.
+  wake(opening = false) {
     if (!this.on) return;
+    const own = !navigator.userActivation || navigator.userActivation.isActive;
+    if (!own && !opening) return;
     if (!this.ctx) this.build();
-    if (this.ctx.state !== 'running') {
-      this.ctx.resume().catch(() => {});     // refused before a touch or a key: the next one tries again
-      // iOS lets a page make sound only once something starts playing inside
-      // a touch that has ended or a tap: a single silent sample does it
-      const blip = this.ctx.createBufferSource();
-      blip.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
-      blip.connect(this.ctx.destination);
-      blip.start();
-    }
+    if (this.ctx.state === 'running' && this.ctx.currentTime > 0) return;
+    this.ctx.resume().catch(() => {});       // refused outside a touch or a key: the next one tries again
+    // iOS lets a page make sound only once something starts playing inside
+    // a touch that has ended or a tap: a single silent sample does it
+    const blip = this.ctx.createBufferSource();
+    blip.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+    blip.connect(this.ctx.destination);
+    blip.start();
   }
 
   setOn(on) {

@@ -304,6 +304,9 @@ let skyNow = 0, skyGoal = 0;
 /// so the light is seen changing from the start: where to, for how long, and
 /// when it set off (once the page shows).
 let intro = null;
+/// When the blind is broken the shop shuts: the slider runs on from the time
+/// it was to the night - from, to, when it sets off, for how long.
+let nightfall = null;
 function setTime() {
   const minutes = Number(slider.value);
   const text = clockWords(minutes);
@@ -400,6 +403,13 @@ function settle(now) {
     }
     if (p === 1) intro = null;
   }
+  if (nightfall && now >= nightfall.start) {
+    const p = Math.min((now - nightfall.start) / 1000 / nightfall.duration, 1);
+    const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(2 - 2 * p, 3) / 2;
+    slider.value = Math.round(nightfall.from + (nightfall.to - nightfall.from) * e);
+    setTime();
+    if (p === 1) nightfall = null;
+  }
   if (skyNow !== skyGoal) {
     skyNow += (skyGoal - skyNow) * (1 - Math.exp(-dt / 0.12));
     if (Math.abs(skyGoal - skyNow) < 2e-4) skyNow = skyGoal;
@@ -445,6 +455,7 @@ knobPhase = knobGoal;
 drawKnob(knobPhase);
 slider.addEventListener('input', () => {
   intro = null;
+  nightfall = null;
   setTime();
 });
 
@@ -845,6 +856,14 @@ function breakBlind(now) {
     if (d.grip === 'lift') { model.endLift(d.index); d.grip = 'none'; }
   }
   sound.crash();
+  // and the shop shuts: a moment after the crash the day runs on into the
+  // night, and the sign goes up ("sorry, we're closed.")
+  const m = Number(slider.value);
+  if (m >= OPENS && m < CLOSES) {
+    intro = null;
+    const to = 22 * 60;
+    nightfall = { from: m, to, start: now + 600, duration: 0.8 + 2 * (to - m) / 1440 };
+  }
 }
 
 /// The worn cord slipping back as it's pulled, with a clatter.

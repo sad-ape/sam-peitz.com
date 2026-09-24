@@ -304,8 +304,8 @@ let skyNow = 0, skyGoal = 0;
 /// so the light is seen changing from the start: where to, for how long, and
 /// when it set off (once the page shows).
 let intro = null;
-/// When the blind is broken the shop shuts: the slider runs on from the time
-/// it was to the night - from, to, when it sets off, for how long.
+/// When the broken blind has fallen the shop shuts: the slider runs on from
+/// the time it was to the night - from, to, when it sets off, for how long.
 let nightfall = null;
 function setTime() {
   const minutes = Number(slider.value);
@@ -856,13 +856,16 @@ function breakBlind(now) {
     if (d.grip === 'lift') { model.endLift(d.index); d.grip = 'none'; }
   }
   sound.crash();
-  // and the shop shuts: a moment after the crash the day runs on into the
-  // night, and the sign goes up ("sorry, we're closed.")
+}
+
+/// The blind gone, the shop shuts: a moment after it lands the day runs on
+/// into the night, and the sign goes up ("sorry, we're closed.").
+function shutShop(now) {
   const m = Number(slider.value);
   if (m >= OPENS && m < CLOSES) {
     intro = null;
     const to = 22 * 60;
-    nightfall = { from: m, to, start: now + 600, duration: 0.8 + 2 * (to - m) / 1440 };
+    nightfall = { from: m, to, start: now + 500, duration: 0.8 + 2 * (to - m) / 1440 };
   }
 }
 
@@ -891,6 +894,7 @@ function fallDown(now, dt) {
   if (g.rail === floor) {
     g.landed = now;
     sound.crash();
+    shutShop(now);
   }
 }
 

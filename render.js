@@ -1,9 +1,11 @@
 // Draws the blind over the page with WebGL2: the fragment shader is
-// Sources/Shaders/Blinds.metal, ported line for line. One difference: the
-// page itself is the HTML underneath, so where the page shows, the shader
-// draws only the light it loses to the blind, as a veil over it. The camera
-// is a video underneath in the same way, and is left alone but for the
-// hairline gaps between shut slats.
+// Sources/Shaders/Blinds.metal, ported line for line. Differences: the page
+// itself is the HTML underneath, so where the page shows, the shader draws
+// only the light it loses to the blind, as a veil over it (the camera is a
+// video underneath in the same way, left alone but for the hairline gaps
+// between shut slats); and the slats' edges are anti-aliased, since the
+// website draws at no more than twice a point, and often less, where the
+// app draws at the phone's full three.
 
 import { MAX_SLATS } from './blinds.js';
 
@@ -340,9 +342,12 @@ vec2 slatOnScreen(Frame f, float D, float sag, vec3 eye) {
   return vec2(lo, hi);
 }
 
-void main() {
-  vec2 vpHalf = uViewport.xy * 0.5;
-  vec2 P2 = gl_FragCoord.xy / uScale - vpHalf;       // world: centre origin, y up
+/// What one ray through P2 (world: centre origin, y up) sees before the
+/// cords go over it - a slat, lit and shaded; the page, as a veil of the
+/// light it loses; or the camera's gap shadows - and whether it's a slat and
+/// where that slat's face is, for the rungs. (The website's anti-aliasing
+/// asks it more than once a pixel where a slat's edge crosses it.)
+vec4 scene(vec2 P2, float rnd, out bool onSlat, out float faceMid, out float faceH, out int surface) {
   vec3 ro = uEye.xyz;
   vec3 rd = normalize(vec3(P2, 0.0) - ro);
 
@@ -350,14 +355,15 @@ void main() {
   float D = uGeo.y, sag = uAnchor.w;
   float xL = uAnchor.x, xR = uAnchor.y, crease = uAnchor.z;
   float aa = kAA * sc;
-  float rnd = ign(gl_FragCoord.xy);
 
   Hit hit;
-  bool onSlat = traceSlats(ro, rd, P2.x, hit);
+  onSlat = traceSlats(ro, rd, P2.x, hit);
+  surface = onSlat ? hit.idx : -1;
 
   // premultiplied: a slat is opaque, the page is a veil over the HTML
   vec4 col;
-  float faceMid = 0.0, faceH = 0.0;
+  faceMid = 0.0;
+  faceH = 0.0;
   if (onSlat) {
     vec2 own = slatOnScreen(slatFrame(slatAt(hit.idx), P2.x, xL, xR, crease), D, sag, ro);
     float upper = 1e9;
@@ -411,6 +417,76 @@ void main() {
       dark = tiny * uLook.y * figmaShadow((above - P2.y) / (sc * uLook.x));
     }
     col = vec4(0.0, 0.0, 0.0, dark);
+  }
+  return col;
+}
+
+/// Which surface a ray through P2 meets first: a slat's index, or -1 for
+/// what's behind the blind. Cheap - it traces, it doesn't shade.
+int surfaceAt(vec2 P2) {
+  vec3 ro = uEye.xyz;
+  Hit h;
+  return traceSlats(ro, normalize(vec3(P2, 0.0) - ro), P2.x, h) ? h.idx : -1;
+}
+
+/// Whether a slat's edge, as drawn, passes within \`band\` of P2 - the only
+/// pixels worth a closer look. Hanging slats near here (as far off their
+/// places as a bend or a broken blind takes them), and the stack.
+bool nearEdge(vec2 P2, float band) {
+  float pitch = uGeo.x, D = uGeo.y, sag = uAnchor.w;
+  int count = int(uCord.w), first = int(uStack.z);
+  int k0 = int(floor((uArc.z - P2.y) / pitch));
+  int span = int(ceil(uArc.w / pitch)) + 2;
+  for (int k = max(k0 - span, 0); k <= min(k0 + span, first - 1); ++k) {
+    vec2 e = slatOnScreen(slatFrame(slatAt(k), P2.x, uAnchor.x, uAnchor.y, uAnchor.z), D, sag, uEye.xyz);
+    if (abs(e.x - P2.y) < band || abs(e.y - P2.y) < band) return true;
+  }
+  if (first < count) {
+    int sLo, sHi;
+    stackRange(P2.y - band, P2.y + band, sLo, sHi);
+    for (int k = sLo; k <= sHi; ++k) {
+      vec2 e = slatOnScreen(slatFrame(slatAt(k), P2.x, uAnchor.x, uAnchor.y, uAnchor.z), D, sag, uEye.xyz);
+      if (abs(e.x - P2.y) < band || abs(e.y - P2.y) < band) return true;
+    }
+  }
+  return false;
+}
+
+void main() {
+  vec2 vpHalf = uViewport.xy * 0.5;
+  vec2 P2 = gl_FragCoord.xy / uScale - vpHalf;       // world: centre origin, y up
+  float sc = uCord.y;
+  float aa = kAA * sc;
+  float rnd = ign(gl_FragCoord.xy);
+
+  bool onSlat;
+  float faceMid, faceH;
+  int here;
+  vec4 col = scene(P2, rnd, onSlat, faceMid, faceH, here);
+
+  // anti-aliasing (the website's): one ray a pixel left the slats' edges
+  // stepped. Near an edge, two cheap rays half a pixel above and below say
+  // whether one crosses this pixel; if so, a few more find where, and the
+  // pixel is the two sides mixed by how much of it each covers. The cords
+  // draw their own soft edges over the top.
+  float hp = 0.5 / uScale.y;                          // half a pixel, in points
+  if (nearEdge(P2, 6.0 * hp)) {
+    int above = surfaceAt(P2 + vec2(0.0, hp));
+    int below = surfaceAt(P2 - vec2(0.0, hp));
+    if (above != here || below != here) {
+      float dir = above != here ? 1.0 : -1.0;
+      float a = 0.0, b = hp;
+      for (int i = 0; i < 4; ++i) {
+        float m = 0.5 * (a + b);
+        if (surfaceAt(P2 + vec2(0.0, dir * m)) == here) a = m; else b = m;
+      }
+      float edge = 0.5 * (a + b);
+      bool o;
+      float m1, h1;
+      int s1;
+      vec4 other = scene(P2 + vec2(0.0, dir * 0.5 * (edge + hp)), rnd, o, m1, h1, s1);
+      col = mix(other, col, (edge + hp) / (2.0 * hp));
+    }
   }
 
   // ladder cords, drawn as designed (a third down the middle of a wide

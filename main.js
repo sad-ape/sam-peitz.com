@@ -170,18 +170,18 @@ window.addEventListener('resize', layout);
 /// where the morning sun comes up, so the stripes stay put through dusk and
 /// dawn - a moon in the afternoon's place made them jump.
 const MOON = { night: 1, lit: Config.nightMoonlit, shade: Config.nightShade, room: Config.nightRoom };
-const DAWN = { sun: [0.25, 0.60, -0.55], pageSun: [0.06, 0.95, -0.60] };
-const DUSK = { sun: [0.30, 0.60, 0.50], pageSun: [0.10, 0.95, 0.50] };
+const DAWN = { sun: [0.25, 0.60, -0.55], pageSun: [0.06, 0.95, -0.20] };
+const DUSK = { sun: [0.30, 0.60, 0.50], pageSun: [0.10, 0.95, 0.20] };
 const DAY = [
   { h: 0, ...MOON, ...DAWN },
   { h: 4.5, ...MOON, ...DAWN },
   { h: 5.5, night: 0, ...DAWN,                                                    // before sunrise: grey twilight
     lit: [0.46, 0.46, 0.49], shade: [0.39, 0.39, 0.42], room: [0.60, 0.61, 0.67] },
-  { h: 6.25, night: 0, sun: [0.32, 0.60, -0.50], pageSun: [0.10, 0.95, -0.55],  // sunrise: warm, a touch red
+  { h: 6.25, night: 0, sun: [0.32, 0.60, -0.50], pageSun: [0.10, 0.95, -0.20],  // sunrise: warm, a touch red
     lit: [1.0, 0.76, 0.58], shade: [0.50, 0.46, 0.45], room: [1.0, 0.88, 0.80] },
-  { h: 7.5, night: 0, sun: [0.55, 0.58, -0.35], pageSun: [0.20, 0.95, -0.40],   // morning
+  { h: 7.5, night: 0, sun: [0.55, 0.58, -0.35], pageSun: [0.20, 0.95, -0.15],   // morning
     lit: [1.0, 0.89, 0.78], shade: [0.54, 0.52, 0.52], room: [0.99, 0.94, 0.90] },
-  { h: 9.5, night: 0, sun: [0.78, 0.50, -0.15], pageSun: [0.32, 0.93, -0.20],
+  { h: 9.5, night: 0, sun: [0.78, 0.50, -0.15], pageSun: [0.32, 0.93, -0.10],
     lit: [1.0, 0.97, 0.93], shade: [0.57, 0.57, 0.58], room: [1.0, 0.99, 0.97] },
   { h: 12, night: 0, sun: [0.92, 0.42, 0.00], pageSun: [0.45, 0.90, -0.05],     // midday: white
     lit: [1.0, 1.0, 1.0], shade: [0.58, 0.58, 0.59], room: [1.03, 1.02, 0.99] },
@@ -189,7 +189,7 @@ const DAY = [
     pageSun: [Config.pageSunUp, Config.pageSunView, Config.pageSunSide],
     lit: Config.pageSunlit.map(v => v / 1.06), shade: Config.pageShade.map(v => v / 1.06),
     room: Config.dayRoom },
-  { h: 19, night: 0, sun: [0.45, 0.60, 0.45], pageSun: [0.16, 0.95, 0.45],      // sunset: gold
+  { h: 19, night: 0, sun: [0.45, 0.60, 0.45], pageSun: [0.16, 0.95, 0.20],      // sunset: gold
     lit: [1.0, 0.82, 0.58], shade: [0.47, 0.44, 0.43], room: [1.06, 0.92, 0.80] },
   { h: 20.25, night: 0, ...DUSK,                                                  // dusk: no sun left
     lit: [0.45, 0.45, 0.47], shade: [0.38, 0.385, 0.41], room: [0.58, 0.60, 0.68] },

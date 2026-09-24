@@ -181,7 +181,9 @@ struct Hit { float t; vec3 nrm; int idx; };
 void stackRange(float ylo, float yhi, out int kLo, out int kHi) {
   int count = int(uCord.w);
   float railY = uStack.x, gap = max(uStack.y, 0.5);
-  float pad = uAnchor.w + uGeo.w + 2.0;
+  // uStack.w: how far a broken blind's crooked stack strays (the website's
+  // Easter egg; nought otherwise)
+  float pad = uAnchor.w + uGeo.w + 2.0 + uStack.w;
   kLo = max(count - 1 - int(ceil((yhi + pad - railY) / gap)), int(uStack.z));
   kHi = min(count - 1 - int(floor((ylo - pad - railY) / gap)), count - 1);
 }
@@ -412,8 +414,9 @@ void main() {
   }
 
   // ladder cords, drawn as designed (a third down the middle of a wide
-  // blind); they end at the bottom slat
-  bool belowBlind = P2.y < uStack.x - uAnchor.w - 2.0 * sc;
+  // blind); they end at the bottom slat - and, once a broken blind has come
+  // off its brackets (uLadder.y, the website's Easter egg), at its top, z
+  bool belowBlind = P2.y < uStack.x - uAnchor.w - 2.0 * sc || (uLadder.y > 0.5 && P2.y > uLadder.z);
   for (int side = 0; side < 3 && !belowBlind; ++side) {
     if (side == 2 && uLadder.x < 0.5) break;
     float dx = P2.x - (side == 0 ? -uCord.x : side == 1 ? uCord.x : 0.0);

@@ -351,6 +351,28 @@ function drawKnob(m) {
   document.documentElement.style.setProperty('--gap', `${(Math.max(outer + 0.7, r) + 3).toFixed(1)}px`);
 }
 
+/// The sign's asterisks, scattered afresh each time it comes: round it,
+/// clear of its words and of each other, above the print (mock pixels).
+function scatterClosedStars() {
+  const placed = [];
+  for (const star of closedStars) {
+    let x = 0, y = 0;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      x = 120 + Math.random() * 334;
+      y = 262 + Math.random() * 194;
+      const onWords = x > 150 && x < 423 && y > 322 && y < 432;
+      if (!onWords && placed.every(([px, py]) => Math.hypot(px - x, py - y) > 34)) break;
+    }
+    placed.push([x, y]);
+    star.setAttribute('x', x.toFixed(1));
+    star.setAttribute('y', y.toFixed(1));
+    star.setAttribute('opacity', '0');
+    star.removeAttribute('transform');
+    star.dataset.delay = Math.round(Math.random() * 700);
+    star.centre = null;                                     // the sparkle measures it afresh
+  }
+}
+
 /// Each frame: the opening run of the slider, the light a step nearer the
 /// slider, the knob a step nearer the sun or the moon.
 let settledAt = 0;
@@ -377,8 +399,8 @@ function settle(now) {
   }
   if (closedShown !== closedGoal) {
     if (closedGoal === 1 && closedShown === 0) {
-      // the sign comes: its asterisks, hidden again, sparkle in once it shows
-      for (const star of closedStars) star.setAttribute('opacity', '0');
+      // the sign comes: its asterisks, somewhere new, sparkle in once it shows
+      scatterClosedStars();
       closedStarsAt = now + 250;
     }
     const step = dt / 0.6;
@@ -490,8 +512,12 @@ canvas.addEventListener('pointerdown', e => {
   const d = { grip: 'tilt', index: -1, startWorldY: w.y, lastY: w.sy, lastT: e.timeStamp,
               velocity: 0, moved: 0, touch: e.pointerType === 'touch' };
   const handle = model.liftHandle(w.x, w.y);
-  if (handle !== null && broken) {
-    d.grip = 'none';                                        // the cord has given way
+  if (broken?.gone) {
+    // the blind lies at the bottom: only the page, and the print on it, are left
+    d.grip = onPrint(e) ? 'print' : 'none';
+    if (d.grip === 'print') grabPrint(e);
+  } else if (handle !== null && broken?.falling) {
+    d.grip = 'none';                                        // still coming down
   } else if (handle !== null) {
     d.grip = 'lift';
     d.index = handle;
@@ -563,7 +589,7 @@ function finish(e, cancelled) {
     case 'none': if (tap) tapPage(e.clientX, e.clientY); break;
   }
   if (tap) {
-    if (e.timeStamp - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
+    if (e.timeStamp - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40 && !broken?.gone) {
       model.toggleOpen();
       toggling = true;                  // opened or shut by the mechanism: it squeaks
       lastTap.t = -1e9;
@@ -631,7 +657,8 @@ canvas.addEventListener('click', () => {
 /// the print - and an up-down arrow on the cords that tilt the blind.
 function cursorAt(e) {
   const w = world(e);
-  if (!broken && model.liftHandle(w.x, w.y) !== null) return 'grab';
+  if (broken?.gone) return onPrint(e) ? 'grab' : linkAt(e.clientX, e.clientY) ? 'pointer' : '';
+  if (!broken?.falling && model.liftHandle(w.x, w.y) !== null) return 'grab';
   if (w.y < model.railY - 6 * model.s) {
     if (onPrint(e)) return 'grab';
     return linkAt(e.clientX, e.clientY) ? 'pointer' : '';
@@ -754,14 +781,18 @@ function sparkle(stars, from, now) {
 
 /// An Easter egg: raised and lowered about four times inside half a minute,
 /// the cord lock gives. The blind drops and lands in a mess - slats slipped
-/// off their rungs, hanging crooked, twisted, kinked - and stays so until
-/// the page is loaded again. The mess is laid over what the model packs for
-/// the shader, so blinds.js stays the app's model line for line.
+/// off their rungs, hanging crooked, twisted, kinked. It still goes up, but
+/// lopsided, the worn cord slipping back now and then; pulled right to the
+/// top, it comes off its brackets, falls to the bottom of the page and lies
+/// there in a heap until the page is loaded again. The mess is laid over
+/// what the model packs for the shader, so blinds.js stays the app's model
+/// line for line.
 const STROKE = 0.4;             // of the whole lift, for a pull to count
 const STROKES = 8, WITHIN = 30000;
 const strokes = [];
 let strokeDir = 1, strokeFrom = 0;
-let broken = null;              // when it broke, how fast it's falling, each slat's share of the mess
+let broken = null;              // when it broke, its fall, its lean, each slat's share of the mess, and
+                                // once it's off its brackets (gone), that fall
 
 function watchLift(now) {
   const f = model.lift / Math.max(model.maxLift, 1);
@@ -779,16 +810,20 @@ function watchLift(now) {
 function breakBlind(now) {
   const rand = (a, b) => a + Math.random() * (b - a);
   const side = () => (Math.random() < 0.5 ? -1 : 1);
-  const lean = rand(0.02, 0.04) * side();                  // the whole blind hangs low on one side
-  broken = { at: now, fall: 0, slats: [] };
+  // slopes, from how far an end strays: the same mess on a phone or a wide window
+  const half = model.width / 2;
+  const hang = rand(4, 8) * model.s * side();              // the whole blind hangs low on one side
+  broken = { at: now, falling: true, fall: 0, lean: rand(18, 30) * model.s * side() / half, gone: null, slats: [] };
   for (let i = 0; i < model.count; i++) {
     broken.slats.push({
       drop: Math.random() < 0.2 ? rand(0.3, 0.75) * model.pitch : 0,
       tilt: rand(-0.55, 0.3),
-      roll: lean * i / model.count + (Math.random() < 0.25 ? rand(0.03, 0.08) * side() : rand(-0.012, 0.012)),
+      roll: (hang * i / model.count + (Math.random() < 0.25 ? rand(6, 16) * side() : rand(-2.5, 2.5)) * model.s) / half,
       skew: Math.random() < 0.35 ? rand(0.25, 0.7) * side() : rand(-0.1, 0.1),
       kink: Math.random() < 0.25 ? rand(6, 20) * model.s * side() : 0,
       kinkX: rand(-0.7, 0.7) * model.cordX,
+      heap: rand(-1.5, 2.5) * model.s,                     // in the heap: a little off its place
+      lie: rand(-0.12, 0.3),                               // and tipped
     });
   }
   for (const d of drags.values()) {
@@ -797,16 +832,81 @@ function breakBlind(now) {
   sound.crash();
 }
 
+/// The worn cord slipping back as it's pulled, with a clatter.
+function slip() {
+  model.lift = Math.max(model.lift - (15 + Math.random() * 40) * model.s, 0);
+  sound.clack(0.4, true);
+}
+
+/// Pulled right up, the broken blind comes off its brackets.
+function comeOff(now) {
+  broken.gone = { rail0: model.railY, rail: model.railY, vel: 0, landed: null };
+  for (const d of drags.values()) {
+    if (d.grip === 'lift') { model.endLift(d.index); d.grip = 'none'; }
+  }
+  sound.crash();
+}
+
+/// ...and falls, faster and faster, to the bottom of the page.
+function fallDown(now, dt) {
+  const g = broken.gone;
+  if (g.landed) return;
+  const floor = -H / 2 + 2 * model.s;
+  g.vel += 2600 * model.s * dt;
+  g.rail = Math.max(g.rail - g.vel * dt, floor);
+  if (g.rail === floor) {
+    g.landed = now;
+    sound.crash();
+  }
+}
+
 /// The mess over the packed slats (eight numbers each: height, tilt, crease
 /// depth, crease x, crease twist, -, skew, roll), coming in over most of a
 /// second with a little overshoot. Slats up in the stack are pressed flat.
 function messUp(now, u) {
-  const t = Math.min((now - broken.at) / 900, 1);
-  const k = 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
-  let reach = 0;
+  const back = t => 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;   // in, with a little overshoot
+  const half = model.width / 2;
+  if (broken.gone) {
+    // the whole blind, packed as it was pulled up, falling; on the bottom a
+    // heap - every slat a little off its place, tipped, crooked, kinked. The
+    // shader finds them all as a stack on a rail at the bottom; the ladder
+    // cords end at its top, and the lift cord comes down with it
+    // low enough to leave the links row clear
+    const g = broken.gone, count = model.count;
+    const gap = 2.2 * model.s;
+    const k = g.landed ? back(Math.min((now - g.landed) / 450, 1)) : 0;
+    let reach = 0;
+    for (let i = 0; i < count; i++) {
+      const m = broken.slats[i], o = i * 8, roll = 0.5 * (broken.lean + m.roll);
+      slats[o] = g.rail + (count - 1 - i) * gap + m.heap * k;
+      slats[o + 1] = m.lie * k;
+      slats[o + 2] = m.kink ? 0.7 * m.kink : 0;
+      slats[o + 3] = m.kinkX;
+      slats[o + 4] = 0.2;
+      slats[o + 6] = 0.4 * m.skew * k;
+      slats[o + 7] = roll * (0.4 + 0.6 * k);
+      reach = Math.max(reach, Math.abs(m.heap) + Math.abs(roll) * half * Math.max(k, 1) + Math.abs(m.kink));
+    }
+    Object.assign(u, { uStack: [g.rail, gap, 0, reach + 2] });
+    u.uLadder = [u.uLadder[0], 1, g.rail + (count - 1) * gap + 4 * model.s, 0];
+    const down = g.rail0 - g.rail;
+    u.uHandle = [u.uHandle[0] - down, u.uHandle[1], u.uHandle[2], g.landed ? 0 : u.uHandle[3]];
+    u.uLiftA = [u.uLiftA[0], u.uLiftA[1], u.uLiftA[2] - down, u.uLiftA[3]];
+    u.uLiftB = [u.uLiftB[0], u.uLiftB[1], u.uLiftB[2] - down, u.uLiftB[3]];
+    return;
+  }
+  const k = back(Math.min((now - broken.at) / 900, 1));
+  let reach = 0, stackReach = 0;
   for (let i = 0; i < model.count; i++) {
-    if (model.isStacked(i)) continue;
     const m = broken.slats[i], o = i * 8;
+    if (model.isStacked(i)) {
+      // up in the stack it hangs lopsided, low on the side the cord gave
+      const roll = broken.lean + 0.3 * m.roll;
+      slats[o + 7] += roll * k;
+      slats[o + 6] += 0.3 * m.skew * k;
+      stackReach = Math.max(stackReach, Math.abs(roll) * half * Math.max(k, 1));
+      continue;
+    }
     slats[o] -= m.drop * k;
     slats[o + 1] = Math.min(Math.max(slats[o + 1] + m.tilt * k, -0.1), 1.45);
     if (m.kink && Math.abs(slats[o + 2]) < 0.5) {         // a finger's crease wins over a kink
@@ -816,9 +916,10 @@ function messUp(now, u) {
     }
     slats[o + 6] += m.skew * k;
     slats[o + 7] += m.roll * k;
-    reach = Math.max(reach, m.drop + Math.abs(m.roll) * model.width / 2 + Math.abs(m.kink));
+    reach = Math.max(reach, m.drop + Math.abs(m.roll) * half + Math.abs(m.kink));
   }
   u.uArc[3] = Math.max(u.uArc[3], reach * Math.max(k, 1) + 2);   // where the shader looks for slats
+  u.uStack = [u.uStack[0], u.uStack[1], u.uStack[2], stackReach + 2];
 }
 
 function frame(now) {
@@ -842,13 +943,21 @@ function frame(now) {
 
   if (!renderer) return;
   const dt = Math.max(now - last, 0) / 1000;
-  const moving = !model.atRest || (broken && model.lift > 0) || (broken && now - broken.at < 1000);
+  const g = broken?.gone;
+  const moving = !model.atRest || (broken && (broken.falling || now - broken.at < 1000))
+                 || (g && (!g.landed || now - g.landed < 600));
   model.step(dt);
+  const step = Math.min(dt, 0.05);
   if (!broken) watchLift(now);
-  else if (model.lift > 0) {
-    broken.fall += 2600 * model.s * Math.min(dt, 0.05);    // dropping, faster and faster
-    model.lift = Math.max(model.lift - broken.fall * Math.min(dt, 0.05), 0);
-  }
+  else if (broken.falling) {
+    broken.fall += 2600 * model.s * step;                  // dropping, faster and faster
+    model.lift = Math.max(model.lift - broken.fall * step, 0);
+    if (model.lift === 0) broken.falling = false;
+  } else if (!g) {
+    if (model.lift >= model.maxLift - 1) comeOff(now);
+    else if (model.lift > 20 * model.s && [...drags.values()].some(d => d.grip === 'lift')
+             && Math.random() < 0.9 * step) slip();
+  } else fallDown(now, step);
   last = now;
 
   // what the hand does to the blind, heard: slats ticking as they turn, a
@@ -868,7 +977,7 @@ function frame(now) {
 
   // the first time the blind is up past "using technology as a tool", its
   // asterisks sparkle in, and then they stay
-  if (tech && starsIn === null && closedShown === 0 && H / 2 - model.railY < techTop - 6) starsIn = now;
+  if (tech && starsIn === null && closedShown === 0 && (g?.landed || H / 2 - model.railY < techTop - 6)) starsIn = now;
 
   // the clouds keep blowing whether or not a frame is drawn; the camera
   // gets none, as in the app

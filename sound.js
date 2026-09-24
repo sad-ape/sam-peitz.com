@@ -327,6 +327,22 @@ export class Soundscape {
   /// A pull taken in hand: a small, dull plastic tock.
   grab() { this.strike({ level: 0.05, pitch: 0.45, ring: 0.015, tone: 0.15, knock: 0.5, pan: 0.3 }); }
 
+  /// The blind giving way (an Easter egg): the cord lock lets go with a
+  /// snap, then the slats clatter down onto one another for most of a
+  /// second, thinning out as they settle.
+  crash() {
+    if (!this.live) return;
+    const now = this.ctx.currentTime;
+    this.strike({ level: 0.1, pitch: 0.55, ring: 0.02, tone: 0.2, knock: 0.8, pan: 0.3 });
+    const n = 28;
+    for (let i = 0; i < n; i++) {
+      const f = i / n;
+      this.strike({ level: (0.04 + 0.09 * Math.random()) * (1 - 0.6 * f), pitch: 0.6 + Math.random() * 0.6,
+                    ring: 0.03 + 0.05 * Math.random(), tone: 0.45, knock: 0.35 * Math.random(),
+                    when: now + 0.06 + 0.9 * f * f + Math.random() * 0.03, pan: (Math.random() - 0.5) * 1.6 });
+    }
+  }
+
   /// Slats turning, radians a second. While the blind is being opened or
   /// shut - a hand on a cord, or a double tap - the tilt squeaks now and then,
   /// more often, a little louder and higher the faster it goes, with a few

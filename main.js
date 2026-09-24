@@ -28,6 +28,7 @@ const video = document.getElementById('camera');
 const closeButton = document.getElementById('close');
 const humans = document.getElementById('humans');
 const clockText = document.getElementById('clock');
+const closedSign = document.getElementById('closed');
 
 const model = new BlindsModel();
 model.liftEnabled = true;
@@ -57,6 +58,13 @@ const groups = [...page.querySelectorAll('.group')].map(el => {
   const ys = [...el.querySelectorAll('text')].map(t => parseFloat(t.getAttribute('y')));
   return { el, mid: (Math.min(...ys) + Math.max(...ys)) / 2 };
 });
+/// By night the words make way for the shop's sign (an Easter egg); the
+/// links row stays. The sign's middle, in mock pixels, for spreading it
+/// over a tall screen like the groups.
+const linksRow = designed ? groups[groups.length - 1].el : null;
+const wordGroups = designed ? groups.slice(0, -1).map(g => g.el) : [];
+const closedStars = closedSign ? [...closedSign.querySelectorAll('text')].filter(t => t.textContent.trim() === '*') : [];
+const CLOSED_MID = 371;
 
 /// Underlines as the mock has them: the width of the linked characters,
 /// 0.12em under the baseline, 0.05em thick.
@@ -111,6 +119,7 @@ function layout() {
   const vbW = W / k, vbH = H / k;
   if (designed) page.setAttribute('viewBox', `${(MOCK_W - vbW) / 2} 0 ${vbW} ${vbH}`);
   for (const g of groups) g.el.setAttribute('transform', `translate(0 ${g.mid * (vbH / MOCK_H - 1)})`);
+  closedSign?.setAttribute('transform', `translate(0 ${CLOSED_MID * (vbH / MOCK_H - 1)})`);
   // the links row keeps clear of the time above the slider, where a screen
   // leaves too little room under it
   if (designed && clockText) {
@@ -274,6 +283,8 @@ function applySky(t) {
   // by moonlight the print is dim and nearly colourless, like everything else
   if (photo) photo.style.filter = sky.night > 0 ? `brightness(${1 - 0.58 * sky.night}) saturate(${1 - 0.45 * sky.night})` : '';
   knobGoal = sky.night > 0.5 ? 1 : 0;                         // the knob: the sun, or the moon
+  const minutes = t * 1440;
+  closedGoal = closedSign && (minutes >= CLOSES || minutes < OPENS) ? 1 : 0;
   dirty = true;
 }
 
@@ -281,6 +292,13 @@ function applySky(t) {
 /// would put it, and where the knob is. The light follows over a moment
 /// (settle), so a jump across the day fades rather than cuts.
 const hhmm = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const clockWords = minutes => hhmm.format(new Date(2000, 0, 1, Math.floor(minutes / 60) % 24, minutes % 60)).toLowerCase();
+/// The shop's hours: closed from 9 in the evening, when the night has mostly
+/// come, to 5 in the morning, when it has mostly gone.
+const OPENS = 5 * 60, CLOSES = 21 * 60;
+const hoursText = document.getElementById('hours');
+if (hoursText) hoursText.textContent = `${clockWords(OPENS)} – ${clockWords(CLOSES)}`;
+let closedShown = 0, closedGoal = 0, closedStarsAt = null;
 let skyNow = 0, skyGoal = 0;
 /// On opening, the slider runs from midnight up to the visitor's own time,
 /// so the light is seen changing from the start: where to, for how long, and
@@ -288,7 +306,7 @@ let skyNow = 0, skyGoal = 0;
 let intro = null;
 function setTime() {
   const minutes = Number(slider.value);
-  const text = hhmm.format(new Date(2000, 0, 1, Math.floor(minutes / 60) % 24, minutes % 60)).toLowerCase();
+  const text = clockWords(minutes);
   if (clockText) clockText.textContent = text;
   slider.setAttribute('aria-valuetext', text);
   document.documentElement.style.setProperty('--when', minutes / 1440);
@@ -357,6 +375,21 @@ function settle(now) {
     knobPhase = knobGoal > knobPhase ? Math.min(knobPhase + step, knobGoal) : Math.max(knobPhase - step, knobGoal);
     drawKnob(knobPhase);
   }
+  if (closedShown !== closedGoal) {
+    if (closedGoal === 1 && closedShown === 0) {
+      // the sign comes: its asterisks, hidden again, sparkle in once it shows
+      for (const star of closedStars) star.setAttribute('opacity', '0');
+      closedStarsAt = now + 250;
+    }
+    const step = dt / 0.6;
+    closedShown = closedGoal > closedShown ? Math.min(closedShown + step, 1) : Math.max(closedShown - step, 0);
+    const e = closedShown * closedShown * (3 - 2 * closedShown);
+    for (const g of wordGroups) g.setAttribute('opacity', (1 - e).toFixed(3));
+    closedSign.setAttribute('opacity', e.toFixed(3));
+    closedSign.setAttribute('visibility', closedShown > 0 ? 'visible' : 'hidden');
+    if (closedShown === 0) closedStarsAt = null;
+  }
+  if (closedStarsAt !== null && sparkle(closedStars, closedStarsAt, now)) closedStarsAt = null;
 }
 
 // it opens at midnight and runs to the visitor's own time - or starts there
@@ -457,7 +490,9 @@ canvas.addEventListener('pointerdown', e => {
   const d = { grip: 'tilt', index: -1, startWorldY: w.y, lastY: w.sy, lastT: e.timeStamp,
               velocity: 0, moved: 0, touch: e.pointerType === 'touch' };
   const handle = model.liftHandle(w.x, w.y);
-  if (handle !== null) {
+  if (handle !== null && broken) {
+    d.grip = 'none';                                        // the cord has given way
+  } else if (handle !== null) {
     d.grip = 'lift';
     d.index = handle;
     model.beginLift(handle, w.x);
@@ -565,8 +600,10 @@ function linkAt(x, y) {
     const r = el.getBoundingClientRect();
     return x > r.left - pad && x < r.right + pad && y > r.top - pad && y < r.bottom + pad;
   };
-  if (humans && near(humans, 8)) return humans;
+  const asleep = closedShown > 0.5;                          // the words are away for the night
+  if (humans && !asleep && near(humans, 8)) return humans;
   for (const a of page.querySelectorAll('a[href]')) {
+    if (asleep && !linksRow.contains(a)) continue;
     if (near(a, a.textContent.length === 1 ? 12 : 8)) return a;
   }
   return null;
@@ -594,7 +631,7 @@ canvas.addEventListener('click', () => {
 /// the print - and an up-down arrow on the cords that tilt the blind.
 function cursorAt(e) {
   const w = world(e);
-  if (model.liftHandle(w.x, w.y) !== null) return 'grab';
+  if (!broken && model.liftHandle(w.x, w.y) !== null) return 'grab';
   if (w.y < model.railY - 6 * model.s) {
     if (onPrint(e)) return 'grab';
     return linkAt(e.clientX, e.clientY) ? 'pointer' : '';
@@ -684,10 +721,12 @@ const SPARKLE = [[0, 0, 0.2, -120], [0.45, 1, 1.5, 15], [0.65, 0.5, 0.9, -5], [0
 const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 let sparkled = false;
 
-function sparkle(now) {
+/// Sparkles `stars` in from `from` (each after its own delay); true once
+/// they all have.
+function sparkle(stars, from, now) {
   let done = true;
-  for (const star of tech.stars) {
-    const t0 = Math.min(Math.max((now - starsIn - +star.dataset.delay) / 900, 0), 1);
+  for (const star of stars) {
+    const t0 = Math.min(Math.max((now - from - +star.dataset.delay) / 900, 0), 1);
     if (t0 < 1) done = false;
     if (calm || t0 >= 1) {
       star.setAttribute('opacity', calm && t0 <= 0 ? '0' : '1');
@@ -708,13 +747,84 @@ function sparkle(now) {
     star.setAttribute('opacity', o.toFixed(3));
     star.setAttribute('transform', `translate(${cx} ${cy}) rotate(${rot.toFixed(2)}) scale(${sc.toFixed(3)}) translate(${-cx} ${-cy})`);
   }
-  if (done) sparkled = true;
+  return done;
+}
+
+// ------------------------------------------------------------ the break
+
+/// An Easter egg: raised and lowered about four times inside half a minute,
+/// the cord lock gives. The blind drops and lands in a mess - slats slipped
+/// off their rungs, hanging crooked, twisted, kinked - and stays so until
+/// the page is loaded again. The mess is laid over what the model packs for
+/// the shader, so blinds.js stays the app's model line for line.
+const STROKE = 0.4;             // of the whole lift, for a pull to count
+const STROKES = 8, WITHIN = 30000;
+const strokes = [];
+let strokeDir = 1, strokeFrom = 0;
+let broken = null;              // when it broke, how fast it's falling, each slat's share of the mess
+
+function watchLift(now) {
+  const f = model.lift / Math.max(model.maxLift, 1);
+  if (strokeDir > 0) {
+    strokeFrom = Math.min(strokeFrom, f);
+    if (f - strokeFrom > STROKE) { strokes.push(now); strokeDir = -1; strokeFrom = f; }
+  } else {
+    strokeFrom = Math.max(strokeFrom, f);
+    if (strokeFrom - f > STROKE) { strokes.push(now); strokeDir = 1; strokeFrom = f; }
+  }
+  while (strokes.length && now - strokes[0] > WITHIN) strokes.shift();
+  if (strokes.length >= STROKES) breakBlind(now);
+}
+
+function breakBlind(now) {
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const side = () => (Math.random() < 0.5 ? -1 : 1);
+  const lean = rand(0.02, 0.04) * side();                  // the whole blind hangs low on one side
+  broken = { at: now, fall: 0, slats: [] };
+  for (let i = 0; i < model.count; i++) {
+    broken.slats.push({
+      drop: Math.random() < 0.2 ? rand(0.3, 0.75) * model.pitch : 0,
+      tilt: rand(-0.55, 0.3),
+      roll: lean * i / model.count + (Math.random() < 0.25 ? rand(0.03, 0.08) * side() : rand(-0.012, 0.012)),
+      skew: Math.random() < 0.35 ? rand(0.25, 0.7) * side() : rand(-0.1, 0.1),
+      kink: Math.random() < 0.25 ? rand(6, 20) * model.s * side() : 0,
+      kinkX: rand(-0.7, 0.7) * model.cordX,
+    });
+  }
+  for (const d of drags.values()) {
+    if (d.grip === 'lift') { model.endLift(d.index); d.grip = 'none'; }
+  }
+  sound.crash();
+}
+
+/// The mess over the packed slats (eight numbers each: height, tilt, crease
+/// depth, crease x, crease twist, -, skew, roll), coming in over most of a
+/// second with a little overshoot. Slats up in the stack are pressed flat.
+function messUp(now, u) {
+  const t = Math.min((now - broken.at) / 900, 1);
+  const k = 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
+  let reach = 0;
+  for (let i = 0; i < model.count; i++) {
+    if (model.isStacked(i)) continue;
+    const m = broken.slats[i], o = i * 8;
+    slats[o] -= m.drop * k;
+    slats[o + 1] = Math.min(Math.max(slats[o + 1] + m.tilt * k, -0.1), 1.45);
+    if (m.kink && Math.abs(slats[o + 2]) < 0.5) {         // a finger's crease wins over a kink
+      slats[o + 2] = m.kink * k;
+      slats[o + 3] = m.kinkX;
+      slats[o + 4] = 0.2;
+    }
+    slats[o + 6] += m.skew * k;
+    slats[o + 7] += m.roll * k;
+    reach = Math.max(reach, m.drop + Math.abs(m.roll) * model.width / 2 + Math.abs(m.kink));
+  }
+  u.uArc[3] = Math.max(u.uArc[3], reach * Math.max(k, 1) + 2);   // where the shader looks for slats
 }
 
 function frame(now) {
   requestAnimationFrame(frame);
   settle(now);
-  if (starsIn !== null && !sparkled) sparkle(now);
+  if (starsIn !== null && !sparkled) sparkled = sparkle(tech.stars, starsIn, now);
 
   if (print.glide) {
     // critically damped from the finger's speed; aimed where friction alone
@@ -732,8 +842,13 @@ function frame(now) {
 
   if (!renderer) return;
   const dt = Math.max(now - last, 0) / 1000;
-  const moving = !model.atRest;
+  const moving = !model.atRest || (broken && model.lift > 0) || (broken && now - broken.at < 1000);
   model.step(dt);
+  if (!broken) watchLift(now);
+  else if (model.lift > 0) {
+    broken.fall += 2600 * model.s * Math.min(dt, 0.05);    // dropping, faster and faster
+    model.lift = Math.max(model.lift - broken.fall * Math.min(dt, 0.05), 0);
+  }
   last = now;
 
   // what the hand does to the blind, heard: slats ticking as they turn, a
@@ -753,7 +868,7 @@ function frame(now) {
 
   // the first time the blind is up past "using technology as a tool", its
   // asterisks sparkle in, and then they stay
-  if (tech && starsIn === null && H / 2 - model.railY < techTop - 6) starsIn = now;
+  if (tech && starsIn === null && closedShown === 0 && H / 2 - model.railY < techTop - 6) starsIn = now;
 
   // the clouds keep blowing whether or not a frame is drawn; the camera
   // gets none, as in the app
@@ -772,6 +887,7 @@ function frame(now) {
   model.packSlats(slats);
   const u = model.uniforms({ page: pageShows, cloud, drift, time: (now - start) / 1000,
                              sky: pageShows ? sky : null });
+  if (broken) messUp(now, u);
   u.uLitRef = [...sky.ref, 0];
   u.uPaperShown = [...paperShown, 0];
   renderer.draw(u, slats, model.count, W, H);

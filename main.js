@@ -373,8 +373,14 @@ function scatterClosedStars() {
   }
 }
 
-/// Each frame: the opening run of the slider, the light a step nearer the
-/// slider, the knob a step nearer the sun or the moon.
+/// How far the blind opens while the slider runs to the visitor's time on
+/// opening: from nearly shut to 30 degrees, the page showing between the
+/// slats as in Sam's screenshot (45 hid too much of it).
+const OPENING_TILT = 30 * Math.PI / 180;
+
+/// Each frame: the opening run of the slider (and the blind opening with
+/// it), the light a step nearer the slider, the knob a step nearer the sun
+/// or the moon.
 let settledAt = 0;
 function settle(now) {
   const dt = Math.min(Math.max(now - settledAt, 0) / 1000, 0.1);
@@ -385,6 +391,13 @@ function settle(now) {
     const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(2 - 2 * p, 3) / 2;   // easing in and out
     slider.value = Math.round(intro.to * e);
     setTime();
+    // the blind opens along with it - until a hand takes it
+    if (drags.size > 0 || model.tiltVel !== 0) intro.handsOn = true;
+    if (!intro.handsOn) {
+      intro.tilt0 ??= model.tilt;
+      model.tilt = intro.tilt0 + (OPENING_TILT - intro.tilt0) * e;
+      dirty = true;
+    }
     if (p === 1) intro = null;
   }
   if (skyNow !== skyGoal) {
@@ -421,6 +434,8 @@ const clock = new Date();
 const minutesNow = clock.getHours() * 60 + clock.getMinutes();
 if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
   intro = { to: minutesNow, duration: 1.2 + 2.4 * minutesNow / 1440, start: null };
+} else {
+  model.tilt = OPENING_TILT;
 }
 slider.value = intro ? 0 : minutesNow;
 setTime();

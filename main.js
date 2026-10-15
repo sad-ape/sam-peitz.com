@@ -960,6 +960,47 @@ function messUp(now, u) {
   u.uStack = [u.uStack[0], u.uStack[1], u.uStack[2], stackReach + 2];
 }
 
+// ------------------------------------------------------------ Safari's bars
+
+/// Safari on a phone colours its status bar and toolbar from fixed things at
+/// the page's edges (Josh Puckett's "Seamless Backgrounds on Mobile Safari";
+/// WebKit bug 301756), so the blind isn't cut off by bars in the paper's
+/// colour: two strips there (.edge in index.html, as tall as the bars cover)
+/// take the colour of the blind just inside them - the first row the bar
+/// doesn't cover, as drawn, over the paper where the page shows, averaged -
+/// and so does theme-color, from the top. Read back a few times a second,
+/// without waiting on the GPU.
+const edgeStyle = document.documentElement.style;
+const themeColor = document.querySelector('meta[name="theme-color"]');
+const [edgeTop, edgeBottom] = document.querySelectorAll('.edge');
+let barsAt = -1e9;
+
+function matchBars(now) {
+  const rows = renderer.takeEdges();
+  if (rows) {
+    const shown = row => {
+      const sum = [0, 0, 0];
+      let n = 0;
+      for (let i = 0; i < row.length; i += 16) {          // every fourth pixel is plenty
+        const behind = 1 - row[i + 3] / 255;
+        for (let k = 0; k < 3; k++) sum[k] += row[i + k] / 255 + paperShown[k] * behind;
+        n++;
+      }
+      return sum.map(v => Math.round(Math.min(Math.max(v / n, 0), 1) * 255));
+    };
+    const hex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+    const top = hex(shown(rows.top)), bottom = hex(shown(rows.bottom));
+    edgeStyle.setProperty('--edge-top', top);
+    edgeStyle.setProperty('--edge-bottom', bottom);
+    themeColor?.setAttribute('content', top);
+  }
+  if (!stream && now - barsAt > 300) {                      // the camera is under the blind: leave them be
+    barsAt = now;
+    const px = canvas.height / H;                           // drawing-buffer rows a point
+    renderer.askEdges(canvas.height - 1 - (edgeTop?.offsetHeight ?? 0) * px, (edgeBottom?.offsetHeight ?? 0) * px);
+  }
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   settle(now);
@@ -1038,6 +1079,7 @@ function frame(now) {
   u.uLitRef = [...sky.ref, 0];
   u.uPaperShown = [...paperShown, 0];
   renderer.draw(u, slats, model.count, W, H);
+  matchBars(now);
   document.body.classList.remove('veiled');
 }
 requestAnimationFrame(frame);

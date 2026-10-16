@@ -26,12 +26,14 @@ export class Liftoff {
     this.meteors = [];
     this.pose = { y: 0, tilt: 0 };
     this.H = innerHeight;
+    this.bar = null;                         // the status bar's colour as it left
   }
 
   get flying() { return this.flight !== null; }
 
   launch(now) {
     this.flight = { at: now };
+    this.bar = getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number);
     this.stars = sky(innerWidth, this.H);
     this.meteors = shootingStars();
     document.documentElement.classList.add('flying');
@@ -51,6 +53,12 @@ export class Liftoff {
       if (t >= FLIGHT) this.land();
     }
     this.pose = { y, tilt };
+    // Safari's status bar is the body's background (index.html): it darkens
+    // into the black as the page climbs, and comes back as it lands
+    if (this.flight) {
+      const u = Math.min(Math.max(-y / H, 0), 1), f = u * u * (3 - 2 * u);
+      document.body.style.backgroundColor = `rgb(${this.bar.map(v => Math.round(v * (1 - f))).join(' ')})`;
+    }
     // a tremble while the thrusters spool up
     const shake = this.flight ? 0 : this.charge;
     const jx = shake ? (Math.random() - 0.5) * 2 * shake : 0;
@@ -74,6 +82,7 @@ export class Liftoff {
   land() {
     this.flight = null;
     document.documentElement.classList.remove('flying');
+    document.body.style.backgroundColor = '';
     document.body.style.transform = '';
     document.body.style.willChange = '';
   }

@@ -32,8 +32,8 @@
   body { overflow: visible; background: var(--bar, var(--paper)); }
   body::after { content: ''; position: absolute; left: 0; top: 100%; width: 100vw; height: var(--under, 0px); background: var(--paper); z-index: -1; }
   /* while the page flies (fly.js) the ground it left is space - black, the
-     stars drawn over it - and so is the status bar */
-  html.flying, html.flying body { background: #000; }
+     stars drawn over it; the status bar darkens into it as the page climbs */
+  html.flying { background: #000; }
   #page, #blind { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; height: 100dvh; }
   #blind { height: calc(100vh + var(--under, 0px)); height: calc(100dvh + var(--under, 0px)); }
   #page {

@@ -96,6 +96,7 @@ if (designed) {
 }
 
 let W = 0, H = 0;
+let pageH = 0;                  // H, less what Safari's toolbar covers at the bottom
 let dirty = true;
 
 /// The print lies where someday.soon puts it; the hand moves it from there.
@@ -112,12 +113,15 @@ function placePrint() {
 /// spacing (as in the app); on a computer the height, the page a column down
 /// the middle. The slats keep their size against the type.
 function layout() {
+  const under = underToolbar();
+  document.documentElement.style.setProperty('--under', `${under}px`);
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (!(w > 0 && h > 0)) return;
   W = w;
   H = h;
-  const k = Math.min(W / MOCK_W, H / MOCK_H);
-  const vbW = W / k, vbH = H / k;
+  pageH = h - under;
+  const k = Math.min(W / MOCK_W, pageH / MOCK_H);
+  const vbW = W / k, vbH = pageH / k;
   if (designed) page.setAttribute('viewBox', `${(MOCK_W - vbW) / 2} 0 ${vbW} ${vbH}`);
   for (const g of groups) g.el.setAttribute('transform', `translate(0 ${g.mid * (vbH / MOCK_H - 1)})`);
   closedSign?.setAttribute('transform', `translate(0 ${CLOSED_MID * (vbH / MOCK_H - 1)})`);
@@ -140,12 +144,12 @@ function layout() {
   // the print, at the bottom right of the page
   const pw = PRINT.width * s, ph = pw * PRINT.aspect;
   const right = (W + MOCK_W * k) / 2 - PRINT.right * s;
-  printCentre = { x: right - pw / 2, y: H - PRINT.bottom * s - ph / 2 };
+  printCentre = { x: right - pw / 2, y: pageH - PRINT.bottom * s - ph / 2 };
   if (photo) Object.assign(photo.style, {
     width: `${pw}px`,
     height: `${ph}px`,
     left: `${right - pw}px`,
-    top: `${H - PRINT.bottom * s - ph}px`,
+    top: `${pageH - PRINT.bottom * s - ph}px`,
     borderRadius: `${3 * s}px`,
     // tight: it lies on the page rather than hovering over it
     boxShadow: `0 ${0.6 * s}px ${1.2 * s}px rgba(0, 0, 0, 0.2), 0 ${1.5 * s}px ${4 * s}px rgba(0, 0, 0, 0.08)`,
@@ -163,6 +167,20 @@ function layout() {
 }
 layout();
 window.addEventListener('resize', layout);
+
+/// How far Safari's toolbar on a phone hangs over the bottom of the page,
+/// which runs on under it to the bottom of the screen (iOS 26 on): the paper
+/// and the blind carry on there, the words, the print and the links keep
+/// above it. The window covers outerHeight - innerHeight top and bottom
+/// together; the status bar's share - the page starts under it - goes by
+/// the screen's size, erring short, so the blind runs at most a few points
+/// past the bottom and never stops short of it.
+function underToolbar() {
+  if (!matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) > 500) return 0;
+  const tall = Math.max(screen.width, screen.height);
+  const status = innerWidth > innerHeight ? 0 : tall >= 874 ? 59 : tall >= 852 ? 54 : tall >= 812 ? 44 : 20;
+  return Math.max(Math.round(outerHeight - innerHeight - status), 0);
+}
 
 // ------------------------------------------------------------------ light
 
@@ -759,7 +777,7 @@ function releasePrint(e, cancelled) {
     // unlike the app, it never glides out of reach: its centre stays on
     // screen, and it eases to the edge rather than sailing past and back
     const clampX = x => Math.min(Math.max(x, -printCentre.x), W - printCentre.x);
-    const clampY = y => Math.min(Math.max(y, -printCentre.y), H - printCentre.y);
+    const clampY = y => Math.min(Math.max(y, -printCentre.y), pageH - printCentre.y);
     const x1 = clampX(print.x + vx / GLIDE), y1 = clampY(print.y + vy / GLIDE);
     if (x1 !== print.x + vx / GLIDE) vx = 0;
     if (y1 !== print.y + vy / GLIDE) vy = 0;
@@ -895,7 +913,7 @@ function comeOff(now) {
 function fallDown(now, dt) {
   const g = broken.gone;
   if (g.landed) return;
-  const floor = -H / 2 + 2 * model.s;
+  const floor = H / 2 - pageH + 2 * model.s;           // above Safari's toolbar
   g.vel += 2600 * model.s * dt;
   g.rail = Math.max(g.rail - g.vel * dt, floor);
   if (g.rail === floor) {
@@ -969,17 +987,18 @@ function messUp(now, u) {
 
 // ------------------------------------------------------------ Safari's bars
 
-/// Safari on a phone colours its status bar and toolbar from fixed things at
-/// the page's edges (Josh Puckett's "Seamless Backgrounds on Mobile Safari";
-/// WebKit bug 301756), so the blind isn't cut off by bars in the paper's
-/// colour: two strips there (.edge in index.html, as tall as the bars cover)
-/// take the colour of the blind just inside them - the first row the bar
-/// doesn't cover, as drawn, over the paper where the page shows, averaged -
-/// and so does theme-color, from the top. Read back a few times a second,
-/// without waiting on the GPU.
-const edgeStyle = document.documentElement.style;
+/// Safari on a phone (iOS 26 on) never shows the page under its status bar:
+/// it fills it with the page's background colour - the body's, once it has
+/// one, over the html's (WebKit's documentBackgroundColor). So the body's
+/// (index.html) is the colour of the blind just under the bar - its top row,
+/// as drawn, over the paper where the page shows, averaged - and so is
+/// theme-color, for browsers that use it; read back a few times a second,
+/// without waiting on the GPU. Under the toolbar at the bottom the page
+/// itself carries on (underToolbar). (Colour strips at both edges, for
+/// Safari to carry on into its bars - Josh Puckett's "Seamless Backgrounds
+/// on Mobile Safari" - made the page look short to Sam: bands right across
+/// the screen, the bottom one as tall as the toolbar.)
 const themeColor = document.querySelector('meta[name="theme-color"]');
-const [edgeTop, edgeBottom] = document.querySelectorAll('.edge');
 let barsAt = -1e9;
 
 function matchBars(now) {
@@ -996,15 +1015,13 @@ function matchBars(now) {
       return sum.map(v => Math.round(Math.min(Math.max(v / n, 0), 1) * 255));
     };
     const hex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
-    const top = hex(shown(rows.top)), bottom = hex(shown(rows.bottom));
-    edgeStyle.setProperty('--edge-top', top);
-    edgeStyle.setProperty('--edge-bottom', bottom);
+    const top = hex(shown(rows.top));
+    document.documentElement.style.setProperty('--top', top);
     themeColor?.setAttribute('content', top);
   }
   if (!stream && now - barsAt > 300) {                      // the camera is under the blind: leave them be
     barsAt = now;
-    const px = canvas.height / H;                           // drawing-buffer rows a point
-    renderer.askEdges(canvas.height - 1 - (edgeTop?.offsetHeight ?? 0) * px, (edgeBottom?.offsetHeight ?? 0) * px);
+    renderer.askEdges(canvas.height - 1, 0);
   }
 }
 
@@ -1039,7 +1056,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   settle(now);
   holdOn(now);
-  sound.thrust(liftoff.step(now));
+  sound.thrust(liftoff.step(now, H));
   if (starsIn !== null && !sparkled) sparkled = sparkle(tech.stars, starsIn, now);
 
   if (print.glide) {

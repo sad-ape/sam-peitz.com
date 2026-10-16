@@ -26,11 +26,7 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); }
   /* while the page flies (fly.js) the ground it left shows dark under it */
   html.flying { background: #101114; }
-  /* the page and the blind run the whole height of the screen, on under
-     Safari's bars too: fixed, Safari cut them off at its bars (under them it
-     only carries on a fixed thing's background colour), so they hang from the
-     top of the page instead, as tall as the screen with the bars away */
-  #page, #blind { position: absolute; left: 0; top: 0; width: 100%; height: 100vh; height: 100lvh; }
+  #page, #blind { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; height: 100dvh; }
   #page {
     font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
     font-size: 18.55px;
@@ -60,12 +56,12 @@
   /* the selfie camera, behind the blind instead of the page */
   #camera {
     display: none;
-    position: absolute;
+    position: fixed;
     left: 0;
     top: 0;
-    width: 100%;
+    width: 100vw;
     height: 100vh;
-    height: 100lvh;
+    height: 100dvh;
     object-fit: cover;
     background: #000;
   }
@@ -191,6 +187,15 @@
   #sound:focus { outline: none; }
   #sound:focus-visible { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
   .veiled #sound, .camera #sound { visibility: hidden; }
+  /* Safari on a phone colours its status bar and toolbar from fixed things at
+     the page's edges (Josh Puckett's "Seamless Backgrounds on Mobile Safari"):
+     two strips there, coloured like the blind just inside them (main.js), so
+     the bars melt into it. They sit under the bars; with a mouse there are no
+     bars over the page, so no strips either. */
+  .edge { display: none; position: fixed; left: 0; right: 0; pointer-events: none; }
+  @media (pointer: coarse) { .edge { display: block; } }
+  .edge-top { top: 0; height: max(12px, env(safe-area-inset-top)); background: var(--edge-top, var(--paper)); }
+  .edge-bottom { bottom: 0; height: max(12px, env(safe-area-inset-bottom)); background: var(--edge-bottom, var(--paper)); }
 </style>
 <noscript><style>.veiled #page { visibility: visible; }</style></noscript>
 </head>
@@ -251,6 +256,8 @@
 <video id="camera" playsinline muted autoplay></video>
 
 <canvas id="blind" aria-hidden="true"></canvas>
+<div class="edge edge-top" aria-hidden="true"></div>
+<div class="edge edge-bottom" aria-hidden="true"></div>
 <button id="close" type="button">close camera</button>
 <input id="time" type="range" min="0" max="1440" aria-label="time of day, midnight to midnight">
 <svg id="knob" viewBox="-11 -11 22 22" aria-hidden="true">

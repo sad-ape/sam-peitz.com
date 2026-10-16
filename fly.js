@@ -2,12 +2,14 @@
 // lifted off on SpaceX cold-gas thrusters: hold a finger - or the mouse -
 // still on the page for a couple of seconds and the whole website does the
 // same. The thrusters spool up with a hiss and a tremble, the page lifts off
-// on white jets of vapour, wobbles, flies up out of sight, comes back down on
-// them and lands where it was, the vapour billowing out along the bottom of
-// the screen and thinning away. The page is <body>, moved by a transform; the
-// vapour is drawn on a canvas outside it, which stays put.
+// on white jets of vapour, wobbles, flies up out of sight ("holy shit." on the
+// ground it left), comes back down, flips right over in mid-air, brakes on
+// the jets and lands where it was, the vapour billowing out along the bottom
+// of the screen and thinning away. The page is <body>, moved by a transform;
+// the vapour and the words are drawn on a canvas outside it, which stays put.
 
-const FLIGHT = 5.2;                           // seconds, lift-off to touch-down
+const FLIGHT = 6.7;                           // seconds, lift-off to touch-down
+const SAYING = 'holy shit.';                  // on the ground it left
 const NOZZLES = [0.08, 0.3, 0.7, 0.92];       // along the page's bottom edge
 
 export class Liftoff {
@@ -38,6 +40,9 @@ export class Liftoff {
       ({ y, tilt, thrust } = path(t, innerHeight));
       if (t >= FLIGHT) this.land();
     }
+    // the words on the ground, once there's room for them, in the middle of it
+    this.saying = this.flight ? smooth(80, 260, -y) : 0;
+    this.sayingY = Math.min(Math.max(innerHeight + y / 2, 0.35 * innerHeight), 0.8 * innerHeight);
     // a tremble while the thrusters spool up
     const shake = this.flight ? 0 : this.charge;
     const jx = shake ? (Math.random() - 0.5) * 2 * shake : 0;
@@ -48,9 +53,9 @@ export class Liftoff {
     } else if (body.transform) {
       body.transform = '';
     }
-    if (thrust > 0.01 || this.puffs.length) {
+    if (thrust > 0.01 || this.puffs.length || this.saying > 0) {
       this.show();
-      this.emit(thrust, innerHeight + y, dt);
+      this.emit(thrust, y, tilt, dt);
       this.draw(dt);
     } else if (this.canvas && this.canvas.style.display !== 'none') {
       this.canvas.style.display = 'none';
@@ -86,18 +91,25 @@ export class Liftoff {
     this.canvas.style.display = 'block';
   }
 
-  /// New puffs at each nozzle, shot down the jet, as many as it blows: many,
-  /// small and faint, so that together they run into one cone of vapour.
-  emit(thrust, bottom, dt) {
-    if (thrust <= 0.01 || bottom < -60) return;
-    const W = innerWidth;
+  /// New puffs at each nozzle, shot down the jet - down as the page has it,
+  /// which in a flip goes round with it - as many as it blows: many, small
+  /// and faint, so that together they run into one cone of vapour.
+  emit(thrust, y, tilt, dt) {
+    if (thrust <= 0.01) return;
+    const W = innerWidth, H = innerHeight;
+    const a = tilt * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    const cx = W / 2, cy = H / 2 + y;                       // the page's middle, where it turns
     for (const nx of NOZZLES) {
+      const lx = nx * W - W / 2, ly = H / 2 - 2;            // the nozzle, from the middle, upright
+      const x = cx + lx * c - ly * s, ny = cy + lx * s + ly * c;
+      if (ny < -60) continue;                               // up out of sight
       let n = 300 * thrust * dt;
       while (n >= 1 || Math.random() < n) {
         n -= 1;
+        const jx = (Math.random() - 0.5) * 90, jy = 620 + Math.random() * 380;
         this.puffs.push({
-          x: nx * W + (Math.random() - 0.5) * 4, y: bottom - 2,
-          vx: (Math.random() - 0.5) * 90, vy: 620 + Math.random() * 380,
+          x: x + (Math.random() - 0.5) * 4, y: ny,
+          vx: jx * c - jy * s, vy: jx * s + jy * c,
           r: 2 + Math.random() * 3, grow: 55 + Math.random() * 45,
           age: 0, life: 0.55 + Math.random() * 0.5, a: 0.22 + 0.14 * thrust, ground: false,
         });
@@ -130,23 +142,35 @@ export class Liftoff {
     const g = this.canvas.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    g.setTransform(px, 0, 0, px, 0, 0);
+    // the words on the ground the page left, under the vapour
+    if (this.saying > 0) {
+      g.setTransform(px, 0, 0, px, 0, 0);
+      g.globalAlpha = 0.9 * this.saying;
+      g.fillStyle = '#ffffff';
+      g.font = '15px ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(SAYING, innerWidth / 2, this.sayingY);
+    }
     for (const p of this.puffs) {
       const fade = 1 - p.age / p.life;
       g.globalAlpha = p.a * fade * fade;
-      // in the jet, drawn out along the way it's going, into a streak
-      const long = p.ground ? 0 : Math.abs(p.vy) * 0.04;
-      g.drawImage(this.sprite, p.x - p.r, p.y - p.r - long, 2 * p.r, 2 * p.r + long);
+      // in the jet, drawn out behind it along the way it's going, into a streak
+      const long = p.ground ? 0 : Math.hypot(p.vx, p.vy) * 0.04;
+      const t = Math.atan2(p.vy, p.vx) - Math.PI / 2, c = Math.cos(t), s = Math.sin(t);
+      g.setTransform(px * c, px * s, -px * s, px * c, px * p.x, px * p.y);
+      g.drawImage(this.sprite, -p.r, -p.r - long, 2 * p.r, 2 * p.r + long);
     }
     g.globalAlpha = 1;
   }
 }
 
 /// Where the page is t seconds after lift-off - y in CSS pixels, up is
-/// negative - how far it leans (degrees), and how hard the thrusters blow.
+/// negative - how far it's turned (degrees, round its middle), and how hard
+/// the thrusters blow.
 function path(t, H) {
   const ease = x => x * x * (3 - 2 * x);
-  const gone = -(H + 360);
+  const gone = -(H + 360), mid = -0.42 * H;
   if (t < 0.9) {                                            // lifting off, unsteady
     const u = t / 0.9;
     return { y: -46 * ease(u), tilt: Math.sin(t * 9) * 0.5 * u, thrust: 1 };
@@ -155,17 +179,30 @@ function path(t, H) {
     const u = (t - 0.9) / 1.0;
     return { y: -46 + (gone + 46) * u * u, tilt: Math.sin(t * 9) * 0.5 * (1 - u), thrust: 1 };
   }
-  if (t < 2.7) return { y: gone, tilt: 0, thrust: 0 };     // out of sight
-  if (t < 4.3) {                                            // back down, braking on the thrusters
-    const u = (t - 2.7) / 1.6;
-    const k = 1 - (1 - u) ** 3;
-    return { y: gone + (-34 - gone) * k, tilt: Math.sin(t * 7) * 0.35 * (1 - u), thrust: 0.4 + 0.6 * u };
+  if (t < 2.5) return { y: gone, tilt: 0, thrust: 0 };     // out of sight
+  if (t < 3.5) {                                            // back down, to a stop in mid-air
+    const u = (t - 2.5) / 1.0;
+    return { y: gone + (mid - gone) * (1 - (1 - u) ** 3), tilt: 0, thrust: 0.3 + 0.5 * u };
   }
-  if (t < 5.0) {                                            // a hover, then down onto its feet
-    const u = (t - 4.3) / 0.7;
+  if (t < 4.6) {                                            // a flip: a hop up and right over
+    const u = (t - 3.5) / 1.1;
+    return { y: mid - 0.12 * H * Math.sin(Math.PI * u), tilt: -360 * ease(u),
+             thrust: 0.55 + 0.45 * Math.abs(Math.sin(2 * Math.PI * u)) };
+  }
+  if (t < 5.8) {                                            // down, braking on the thrusters
+    const u = (t - 4.6) / 1.2;
+    return { y: mid + (-34 - mid) * (1 - (1 - u) ** 3), tilt: Math.sin(t * 7) * 0.35 * (1 - u), thrust: 0.6 + 0.4 * u };
+  }
+  if (t < 6.5) {                                            // a hover, then down onto its feet
+    const u = (t - 5.8) / 0.7;
     return { y: -34 * (1 - ease(u)) + 3 * Math.sin(Math.PI * 2 * u) * (1 - u), tilt: 0, thrust: 1 - u };
   }
   return { y: 0, tilt: 0, thrust: 0 };
+}
+
+function smooth(a, b, x) {
+  const u = Math.min(Math.max((x - a) / (b - a), 0), 1);
+  return u * u * (3 - 2 * u);
 }
 
 /// One soft puff of vapour: white at the heart, a cool grey at its edge so it

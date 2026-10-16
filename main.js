@@ -999,6 +999,16 @@ function messUp(now, u) {
 /// off, flies up out of sight and lands again. Letting go before then, or
 /// moving, calls it off.
 const liftoff = new Liftoff();
+let dropping = null;            // a raised blind the landing let go of: how fast it's falling
+liftoff.onTouchdown = () => {
+  // the landing jolts the cord lock open: a raised blind drops back down
+  if (broken || !(model.lift > 0)) return;
+  for (const d of drags.values()) {
+    if (d.grip === 'lift') { model.endLift(d.index); d.grip = 'none'; }
+  }
+  dropping = { fall: 0 };
+  sound.lock();
+};
 let steady = null;              // the finger held still: which, where, since when
 const SPOOL = [0.5, 2.0];       // seconds held: the thrusters start to stir, and fire
 
@@ -1043,10 +1053,15 @@ function frame(now) {
   if (!renderer) return;
   const dt = Math.max(now - last, 0) / 1000;
   const g = broken?.gone;
-  const moving = !model.atRest || (broken && (broken.falling || now - broken.at < 1000))
+  const moving = !model.atRest || dropping || (broken && (broken.falling || now - broken.at < 1000))
                  || (g && (!g.landed || now - g.landed < 600));
   model.step(dt);
   const step = Math.min(dt, 0.05);
+  if (dropping) {                                          // let go by the landing
+    dropping.fall += 2600 * model.s * step;
+    model.lift = Math.max(model.lift - dropping.fall * step, 0);
+    if (model.lift === 0) { dropping = null; sound.clack(0.8, true); }
+  }
   if (!broken) watchLift(now);
   else if (broken.falling) {
     broken.fall += 2600 * model.s * step;                  // dropping, faster and faster

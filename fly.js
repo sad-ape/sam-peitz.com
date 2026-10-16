@@ -11,7 +11,8 @@
 // which stays put. The page is H tall: on a phone it runs on under Safari's
 // toolbar, to the bottom of the screen.
 
-const FLIGHT = 5.9;                           // seconds, lift-off to touch-down
+const FLIGHT = 5.9;                           // seconds, lift-off to the vapour settling
+const TOUCHDOWN = 5.7;                        // seconds after lift-off: back on its feet (path)
 const STARS = 0.0004;                         // a square point: ~140 on a phone
 const NOZZLES = [0.08, 0.3, 0.7, 0.92];       // along the page's bottom edge
 
@@ -27,6 +28,7 @@ export class Liftoff {
     this.pose = { y: 0, tilt: 0 };
     this.H = innerHeight;
     this.bar = null;                         // the status bar's colour as it left
+    this.onTouchdown = null;                 // main.js: the landing's jolt
   }
 
   get flying() { return this.flight !== null; }
@@ -50,6 +52,10 @@ export class Liftoff {
     if (this.flight) {
       const t = (now - this.flight.at) / 1000;
       ({ y, tilt, thrust } = path(t, H));
+      if (!this.flight.down && t >= TOUCHDOWN) {
+        this.flight.down = true;
+        this.onTouchdown?.();
+      }
       if (t >= FLIGHT) this.land();
     }
     this.pose = { y, tilt };

@@ -19,17 +19,17 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="A venetian blind half open over a page that says hey i’m Sam">
 <meta name="twitter:card" content="summary_large_image">
-<!-- the colour of the browser's bar, where it takes theme-color: the blind's at the top edge, kept up to date by main.js -->
+<!-- the colour of the browser's bar, where it takes theme-color: the page's in the light of the hour, kept up to date by main.js -->
 <meta name="theme-color" content="#d7dee0">
 <style>
   :root { --paper: #F0F5F5; --ink: #121212; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); }
   /* Safari on a phone fills its status bar with the page's background colour
-     - the body's - so that is the blind's own, just under it (main.js), and
-     the paper is the page's (#page); and it runs the page on under its
-     toolbar to the bottom of the screen: the paper and the blind carry on
-     there, by --under (main.js; nought with a mouse) */
-  body { overflow: visible; background: var(--top, var(--paper)); }
+     - the body's, over the html's - so that is the page's own as it is in
+     the light of the hour (main.js), and the paper is #page's; and it runs
+     the page on under its toolbar to the bottom of the screen: the paper and
+     the blind carry on there, by --under (main.js; nought with a mouse) */
+  body { overflow: visible; background: var(--bar, var(--paper)); }
   body::after { content: ''; position: absolute; left: 0; top: 100%; width: 100vw; height: var(--under, 0px); background: var(--paper); z-index: -1; }
   /* while the page flies (fly.js) the ground it left is space - black, the
      stars drawn over it - and so is the status bar */

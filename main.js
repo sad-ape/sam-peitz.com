@@ -289,6 +289,7 @@ let lastCloudFrame = 0;
 let sky = skyAt(0.5);
 let paperShown = PAPER;
 const slider = document.getElementById('time');
+const themeColor = document.querySelector('meta[name="theme-color"]');
 
 function applySky(t) {
   sky = skyAt(t);
@@ -297,6 +298,12 @@ function applySky(t) {
   paperShown = paper;
   document.documentElement.style.setProperty('--paper', css(paper));
   document.documentElement.style.setProperty('--ink', css(ink));
+  // Safari on a phone fills its status bar with the body's background colour
+  // (index.html): that is the page's own, as it is in this light - in the
+  // sun, as it shows between the slats - and so is theme-color
+  const bar = paper.map((v, k) => Math.min(v * sky.lit[k] / sky.ref[k], 1));
+  document.documentElement.style.setProperty('--bar', css(bar));
+  themeColor?.setAttribute('content', '#' + bar.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''));
   document.body.classList.toggle('night', sky.night > 0.5);
   sound.day = 1 - sky.night;                                   // birds by day
   // by moonlight the print is dim and nearly colourless, like everything else
@@ -985,46 +992,6 @@ function messUp(now, u) {
   u.uStack = [u.uStack[0], u.uStack[1], u.uStack[2], stackReach + 2];
 }
 
-// ------------------------------------------------------------ Safari's bars
-
-/// Safari on a phone (iOS 26 on) never shows the page under its status bar:
-/// it fills it with the page's background colour - the body's, once it has
-/// one, over the html's (WebKit's documentBackgroundColor). So the body's
-/// (index.html) is the colour of the blind just under the bar - its top row,
-/// as drawn, over the paper where the page shows, averaged - and so is
-/// theme-color, for browsers that use it; read back a few times a second,
-/// without waiting on the GPU. Under the toolbar at the bottom the page
-/// itself carries on (underToolbar). (Colour strips at both edges, for
-/// Safari to carry on into its bars - Josh Puckett's "Seamless Backgrounds
-/// on Mobile Safari" - made the page look short to Sam: bands right across
-/// the screen, the bottom one as tall as the toolbar.)
-const themeColor = document.querySelector('meta[name="theme-color"]');
-let barsAt = -1e9;
-
-function matchBars(now) {
-  const rows = renderer.takeEdges();
-  if (rows) {
-    const shown = row => {
-      const sum = [0, 0, 0];
-      let n = 0;
-      for (let i = 0; i < row.length; i += 16) {          // every fourth pixel is plenty
-        const behind = 1 - row[i + 3] / 255;
-        for (let k = 0; k < 3; k++) sum[k] += row[i + k] / 255 + paperShown[k] * behind;
-        n++;
-      }
-      return sum.map(v => Math.round(Math.min(Math.max(v / n, 0), 1) * 255));
-    };
-    const hex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
-    const top = hex(shown(rows.top));
-    document.documentElement.style.setProperty('--top', top);
-    themeColor?.setAttribute('content', top);
-  }
-  if (!stream && now - barsAt > 300) {                      // the camera is under the blind: leave them be
-    barsAt = now;
-    renderer.askEdges(canvas.height - 1, 0);
-  }
-}
-
 // ------------------------------------------------------------ lift-off
 
 /// An Easter egg (fly.js): a finger - or the mouse - held still on the page
@@ -1132,7 +1099,6 @@ function frame(now) {
   u.uLitRef = [...sky.ref, 0];
   u.uPaperShown = [...paperShown, 0];
   renderer.draw(u, slats, model.count, W, H);
-  matchBars(now);
   document.body.classList.remove('veiled');
 }
 requestAnimationFrame(frame);

@@ -612,38 +612,4 @@ export class Renderer {
     gl.uniform4fv(loc.uSlats, slats, 0, count * 8);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
-
-  /// Asks for two rows of the frame just drawn - `top` and `bottom` in the
-  /// drawing buffer's rows, counted up from the bottom - for Safari's bars to
-  /// take their colours from (main.js), without waiting for them: they come
-  /// back later through takeEdges.
-  askEdges(top, bottom) {
-    const { gl } = this;
-    if (this.edgeAsk) return;
-    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
-    top = Math.min(Math.max(Math.round(top), 0), h - 1);
-    bottom = Math.min(Math.max(Math.round(bottom), 0), h - 1);
-    this.edgeBuffer ??= gl.createBuffer();
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.edgeBuffer);
-    gl.bufferData(gl.PIXEL_PACK_BUFFER, w * 8, gl.STREAM_READ);
-    gl.readPixels(0, top, w, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
-    gl.readPixels(0, bottom, w, 1, gl.RGBA, gl.UNSIGNED_BYTE, w * 4);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    this.edgeAsk = { sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0), w };
-    gl.flush();
-  }
-
-  /// The rows asked for, once the GPU has them - { top, bottom }, RGBA as
-  /// drawn (premultiplied) - or null while they're on their way.
-  takeEdges() {
-    const { gl } = this, ask = this.edgeAsk;
-    if (!ask || gl.getSyncParameter(ask.sync, gl.SYNC_STATUS) !== gl.SIGNALED) return null;
-    gl.deleteSync(ask.sync);
-    this.edgeAsk = null;
-    const rows = new Uint8Array(ask.w * 8);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.edgeBuffer);
-    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, rows);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    return { top: rows.subarray(0, ask.w * 4), bottom: rows.subarray(ask.w * 4) };
-  }
 }

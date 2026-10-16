@@ -345,6 +345,30 @@ export class Soundscape {
     this.thrustGain.gain.setTargetAtTime(0.35 * level * (0.85 + Math.random() * 0.3), now, level > 0 ? 0.04 : 0.15);
   }
 
+  /// The page landing hard (an Easter egg, fly.js): a low thump through the
+  /// floor - a boom falling away, a dull whump of air - and the knock of it.
+  thud() {
+    if (!this.live) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    const boom = ctx.createOscillator(), g = ctx.createGain();
+    boom.frequency.setValueAtTime(120, now);
+    boom.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.6, now + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    boom.connect(g).connect(this.near);
+    boom.start(now);
+    boom.stop(now + 0.5);
+    const air = loop(ctx, this.noise), low = ctx.createBiquadFilter(), w = ctx.createGain();
+    low.type = 'lowpass';
+    low.frequency.value = 420;
+    w.gain.setValueAtTime(0.35, now);
+    w.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    air.connect(low).connect(w).connect(this.near);
+    air.stop(now + 0.3);
+    this.strike({ level: 0.12, pitch: 0.4, ring: 0.02, tone: 0.1, knock: 1 });
+  }
+
   /// A pull taken in hand: a small, dull plastic tock.
   grab() { this.strike({ level: 0.05, pitch: 0.45, ring: 0.015, tone: 0.15, knock: 0.5, pan: 0.3 }); }
 

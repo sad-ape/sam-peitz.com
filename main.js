@@ -1001,12 +1001,13 @@ function messUp(now, u) {
 const liftoff = new Liftoff();
 let dropping = null;            // a raised blind the landing let go of: how fast it's falling
 liftoff.onTouchdown = () => {
-  // the landing jolts the cord lock open: a raised blind drops back down
+  sound.thud();
+  // the landing jolts the cord lock open: a raised blind is knocked back down
   if (broken || !(model.lift > 0)) return;
   for (const d of drags.values()) {
     if (d.grip === 'lift') { model.endLift(d.index); d.grip = 'none'; }
   }
-  dropping = { fall: 0 };
+  dropping = { fall: 500 * model.s };
   sound.lock();
 };
 let steady = null;              // the finger held still: which, where, since when

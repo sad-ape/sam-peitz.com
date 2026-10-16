@@ -6,13 +6,14 @@
 // leaves is space, tiny stars glittering in it, a few shooting across - then
 // comes back down, brakes
 // on the jets and lands where it was, the vapour billowing out along the
-// bottom of the screen and thinning away. The page is <body>, moved by a
+// bottom of the screen and thinning away - until the last stretch, which it
+// drops, the thrusters cut, and hits the ground hard. The page is <body>, moved by a
 // transform; the vapour and the stars are drawn on a canvas outside it,
 // which stays put. The page is H tall: on a phone it runs on under Safari's
 // toolbar, to the bottom of the screen.
 
 const FLIGHT = 5.9;                           // seconds, lift-off to the vapour settling
-const TOUCHDOWN = 5.7;                        // seconds after lift-off: back on its feet (path)
+const TOUCHDOWN = 5.25;                       // seconds after lift-off: it hits the ground (path)
 const STARS = 0.0004;                         // a square point: ~140 on a phone
 const NOZZLES = [0.08, 0.3, 0.7, 0.92];       // along the page's bottom edge
 
@@ -54,6 +55,7 @@ export class Liftoff {
       ({ y, tilt, thrust } = path(t, H));
       if (!this.flight.down && t >= TOUCHDOWN) {
         this.flight.down = true;
+        this.burst();
         this.onTouchdown?.();
       }
       if (t >= FLIGHT) this.land();
@@ -65,8 +67,9 @@ export class Liftoff {
       const u = Math.min(Math.max(-y / H, 0), 1), f = u * u * (3 - 2 * u);
       document.body.style.backgroundColor = `rgb(${this.bar.map(v => Math.round(v * (1 - f))).join(' ')})`;
     }
-    // a tremble while the thrusters spool up
-    const shake = this.flight ? 0 : this.charge;
+    // a tremble while the thrusters spool up, and the jolt of the landing
+    const hit = this.flight ? (now - this.flight.at) / 1000 - TOUCHDOWN : -1;
+    const shake = this.flight ? (hit > 0 ? 2.5 * Math.max(1 - hit / 0.3, 0) : 0) : this.charge;
     const jx = shake ? (Math.random() - 0.5) * 2 * shake : 0;
     const jy = shake ? (Math.random() - 0.5) * 1.5 * shake : 0;
     const body = document.body.style;
@@ -138,6 +141,20 @@ export class Liftoff {
           age: 0, life: 0.55 + Math.random() * 0.5, a: 0.22 + 0.14 * thrust, ground: false,
         });
       }
+    }
+  }
+
+  /// The landing knocks out the vapour left under the page: a puff along the
+  /// ground, out to either side.
+  burst() {
+    const W = innerWidth, H = this.H;
+    for (let i = 0; i < 70; i++) {
+      const x = Math.random() * W, out = x < W / 2 ? -1 : 1;
+      this.puffs.push({
+        x, y: H - 2, vx: out * (250 + Math.random() * 450), vy: -(10 + Math.random() * 60),
+        r: 6 + Math.random() * 10, grow: 60 + Math.random() * 60,
+        age: 0, life: 0.7 + Math.random() * 0.7, a: 0.18 + Math.random() * 0.1, ground: true,
+      });
     }
   }
 
@@ -272,6 +289,7 @@ function sky(W, H) {
 
 /// Where the page is t seconds after lift-off - y in CSS pixels, up is
 /// negative - how far it leans (degrees), and how hard the thrusters blow.
+const HOVER = -70;                            // where the braking leaves it, to drop from
 function path(t, H) {
   const ease = x => x * x * (3 - 2 * x);
   const gone = -(H + 360);
@@ -286,13 +304,14 @@ function path(t, H) {
   if (t < 3.4) return { y: gone, tilt: 0, thrust: 0 };     // out of sight: only the stars
   if (t < 5.0) {                                            // back down, braking on the thrusters
     const u = (t - 3.4) / 1.6;
-    return { y: gone + (-34 - gone) * (1 - (1 - u) ** 3), tilt: Math.sin(t * 7) * 0.35 * (1 - u), thrust: 0.4 + 0.6 * u };
+    return { y: gone + (HOVER - gone) * (1 - (1 - u) ** 3), tilt: Math.sin(t * 7) * 0.35 * (1 - u), thrust: 0.4 + 0.6 * u };
   }
-  if (t < 5.7) {                                            // a hover, then down onto its feet
-    const u = (t - 5.0) / 0.7;
-    return { y: -34 * (1 - ease(u)) + 3 * Math.sin(Math.PI * 2 * u) * (1 - u), tilt: 0, thrust: 1 - u };
+  if (t < TOUCHDOWN) {                                      // the thrusters cut: it drops the last bit
+    const u = (t - 5.0) / (TOUCHDOWN - 5.0);
+    return { y: HOVER * (1 - u * u), tilt: 0, thrust: Math.max(1 - 4 * u, 0) };
   }
-  return { y: 0, tilt: 0, thrust: 0 };
+  const s = t - TOUCHDOWN;                                  // and hits the ground: a hard little bounce
+  return { y: -9 * Math.exp(-9 * s) * Math.abs(Math.sin(Math.PI * 9 * s)), tilt: 0, thrust: 0 };
 }
 
 /// One soft puff of vapour: white at the heart, a cool grey at its edge so it

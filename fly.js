@@ -3,7 +3,8 @@
 // still on the page for a couple of seconds and the whole website does the
 // same. The thrusters spool up with a hiss and a tremble, the page lifts off
 // on white jets of vapour, wobbles and flies up out of sight - the black it
-// leaves is space, tiny stars glittering in it - then comes back down, brakes
+// leaves is space, tiny stars glittering in it, a few shooting across - then
+// comes back down, brakes
 // on the jets and lands where it was, the vapour billowing out along the
 // bottom of the screen and thinning away. The page is <body>, moved by a
 // transform; the vapour and the stars are drawn on a canvas outside it,
@@ -22,6 +23,7 @@ export class Liftoff {
     this.last = 0;
     this.canvas = null;
     this.stars = [];
+    this.meteors = [];
     this.pose = { y: 0, tilt: 0 };
     this.H = innerHeight;
   }
@@ -31,6 +33,7 @@ export class Liftoff {
   launch(now) {
     this.flight = { at: now };
     this.stars = sky(innerWidth, this.H);
+    this.meteors = shootingStars();
     document.documentElement.classList.add('flying');
     document.body.style.willChange = 'transform';
   }
@@ -164,7 +167,9 @@ export class Liftoff {
 
   /// The stars, in the black only - everywhere but where the page is - each
   /// glittering in its own time, a few now and then with a glint; coming out
-  /// as the page leaves, and sinking a little as it climbs.
+  /// as the page leaves, and sinking a little as it climbs. And now and then
+  /// a shooting star: a thin streak, its tail growing out behind it, that
+  /// flares up and is gone.
   twinkle(g, px, now) {
     const W = innerWidth, H = this.H, t = (now - this.flight.at) / 1000;
     const out = Math.min(Math.max((t - 0.2) / 0.8, 0), 1);
@@ -197,8 +202,41 @@ export class Liftoff {
         }
       }
     }
+    g.lineWidth = 1.1;
+    g.lineCap = 'round';
+    for (const m of this.meteors) {
+      const u = (t - m.at) / m.life;
+      if (u <= 0 || u >= 1) continue;
+      const run = m.speed * m.life * u, len = m.tail * Math.min(3 * u, 1);
+      const hx = m.x * W + m.dx * run, hy = m.y * H + m.dy * run;
+      const tx = hx - m.dx * len, ty = hy - m.dy * len;
+      const streak = g.createLinearGradient(hx, hy, tx, ty);
+      streak.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      streak.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      g.globalAlpha = out * Math.sin(Math.PI * u);
+      g.strokeStyle = streak;
+      g.beginPath();
+      g.moveTo(hx, hy);
+      g.lineTo(tx, ty);
+      g.stroke();
+    }
     g.restore();
   }
+}
+
+/// A few shooting stars for each flight, while the page is away (or nearly):
+/// when, where from (fractions of the screen), which way - down to one side -
+/// how fast and how long the tail.
+function shootingStars() {
+  return [1.4, 2.2, 2.9].map(at => {
+    const right = Math.random() < 0.5, a = (15 + Math.random() * 25) * Math.PI / 180;
+    return {
+      at: at + Math.random() * 0.5, life: 0.45 + Math.random() * 0.3,
+      x: right ? 0.05 + Math.random() * 0.5 : 0.45 + Math.random() * 0.5, y: 0.06 + Math.random() * 0.45,
+      dx: (right ? 1 : -1) * Math.cos(a), dy: Math.sin(a),
+      speed: 600 + Math.random() * 450, tail: 60 + Math.random() * 70,
+    };
+  });
 }
 
 /// A fresh sky for each flight: tiny points, most faint, a few brighter -

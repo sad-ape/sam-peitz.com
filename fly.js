@@ -70,8 +70,10 @@ export class Liftoff {
     // a tremble while the thrusters spool up, and the jolt of the landing
     const hit = this.flight ? (now - this.flight.at) / 1000 - TOUCHDOWN : -1;
     const shake = this.flight ? (hit > 0 ? 2.5 * Math.max(1 - hit / 0.3, 0) : 0) : this.charge;
-    const jx = shake ? (Math.random() - 0.5) * 2 * shake : 0;
-    const jy = shake ? (Math.random() - 0.5) * 1.5 * shake : 0;
+    // a buzz, not a jitter: random from one frame to the next read as stutter
+    const z = now / 1000 * 2 * Math.PI;
+    const jx = shake ? 0.6 * shake * (0.7 * Math.sin(9 * z) + 0.3 * Math.sin(13 * z + 1)) : 0;
+    const jy = shake ? 0.45 * shake * (0.6 * Math.sin(11 * z + 2) + 0.4 * Math.sin(7 * z)) : 0;
     const body = document.body.style;
     if (y || tilt || jx || jy) {
       body.transform = `translate(${jx.toFixed(2)}px, ${(y + jy).toFixed(2)}px) rotate(${tilt.toFixed(3)}deg)`;
@@ -107,6 +109,7 @@ export class Liftoff {
       });
       document.documentElement.appendChild(this.canvas);
       this.sprite = puffSprite();
+      this.fog = document.createElement('canvas');            // the vapour: soft, so one pixel a point is plenty
     }
     const px = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round(innerWidth * px), h = Math.round(this.H * px);
@@ -114,6 +117,8 @@ export class Liftoff {
       this.canvas.width = w;
       this.canvas.height = h;
       this.canvas.style.height = `${this.H}px`;
+      this.fog.width = innerWidth;
+      this.fog.height = Math.round(this.H);
     }
     this.canvas.style.display = 'block';
   }
@@ -153,7 +158,7 @@ export class Liftoff {
       this.puffs.push({
         x, y: H - 2, vx: out * (250 + Math.random() * 450), vy: -(10 + Math.random() * 60),
         r: 6 + Math.random() * 10, grow: 60 + Math.random() * 60,
-        age: 0, life: 0.7 + Math.random() * 0.7, a: 0.18 + Math.random() * 0.1, ground: true,
+        age: 0, life: 0.7 + Math.random() * 0.7, a: 0.18 + Math.random() * 0.1, ground: true, burst: true,
       });
     }
   }
@@ -181,32 +186,44 @@ export class Liftoff {
       p.r = Math.min(p.r + p.grow * dt, 90);
     }
     this.puffs = this.puffs.filter(p => p.age < p.life);
+    // the vapour, at a pixel a point
+    const f = this.fog.getContext('2d');
+    f.setTransform(1, 0, 0, 1, 0, 0);
+    f.clearRect(0, 0, this.fog.width, this.fog.height);
+    for (const p of this.puffs) if (!p.burst) this.puff(f, p, 1);
+    f.globalAlpha = 1;
+    // over the stars, and only where the page isn't: out of its bottom edge,
+    // never over it
     const g = this.canvas.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    if (this.flight) this.twinkle(g, px, now);
-    for (const p of this.puffs) {
-      const fade = 1 - p.age / p.life;
-      g.globalAlpha = p.a * fade * fade;
-      // in the jet, drawn out behind it along the way it's going, into a streak
-      const long = p.ground ? 0 : Math.hypot(p.vx, p.vy) * 0.04;
-      const t = Math.atan2(p.vy, p.vx) - Math.PI / 2, c = Math.cos(t), s = Math.sin(t);
-      g.setTransform(px * c, px * s, -px * s, px * c, px * p.x, px * p.y);
-      g.drawImage(this.sprite, -p.r, -p.r - long, 2 * p.r, 2 * p.r + long);
-    }
+    g.save();
+    this.clipOutside(g, px);
+    if (this.flight) this.twinkle(g, now);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.drawImage(this.fog, 0, 0, this.canvas.width, this.canvas.height);
+    g.restore();
+    // but the puff the landing knocks out comes out in front
+    for (const p of this.puffs) if (p.burst) this.puff(g, p, px);
     g.globalAlpha = 1;
   }
 
-  /// The stars, in the black only - everywhere but where the page is - each
-  /// glittering in its own time, a few now and then with a glint; coming out
-  /// as the page leaves, and sinking a little as it climbs. And now and then
-  /// a shooting star: a thin streak, its tail growing out behind it, that
-  /// flares up and is gone.
-  twinkle(g, px, now) {
-    const W = innerWidth, H = this.H, t = (now - this.flight.at) / 1000;
-    const out = Math.min(Math.max((t - 0.2) / 0.8, 0), 1);
-    const { y, tilt } = this.pose;
-    g.save();
+  /// One puff, fading as it goes; in the jet, drawn out behind it along the
+  /// way it's going, into a streak.
+  puff(g, p, px) {
+    const fade = 1 - p.age / p.life;
+    g.globalAlpha = p.a * fade * fade;
+    const long = p.ground ? 0 : Math.hypot(p.vx, p.vy) * 0.04;
+    const t = Math.atan2(p.vy, p.vx) - Math.PI / 2, c = Math.cos(t), s = Math.sin(t);
+    g.setTransform(px * c, px * s, -px * s, px * c, px * p.x, px * p.y);
+    g.drawImage(this.sprite, -p.r, -p.r - long, 2 * p.r, 2 * p.r + long);
+  }
+
+  /// Everything but the page, where it is now: the black it left and the
+  /// ground under it.
+  clipOutside(g, px) {
+    const W = innerWidth, H = this.H, { y, tilt } = this.pose;
     g.setTransform(px, 0, 0, px, 0, 0);
     g.beginPath();
     g.rect(0, 0, W, H);
@@ -215,6 +232,17 @@ export class Liftoff {
     g.rect(-W / 2, -H / 2, W, H);
     g.setTransform(px, 0, 0, px, 0, 0);
     g.clip('evenodd');
+  }
+
+  /// The stars, in the black only (the caller clips to it), each glittering
+  /// in its own time, a few now and then with a glint; coming out as the page
+  /// leaves, and sinking a little as it climbs. And now and then a shooting
+  /// star: a thin streak, its tail growing out behind it, that flares up and
+  /// is gone.
+  twinkle(g, now) {
+    const W = innerWidth, H = this.H, t = (now - this.flight.at) / 1000;
+    const out = Math.min(Math.max((t - 0.2) / 0.8, 0), 1);
+    const { y } = this.pose;
     g.fillStyle = '#fff';
     const sink = -0.04 * y;
     for (const s of this.stars) {
@@ -252,7 +280,6 @@ export class Liftoff {
       g.lineTo(tx, ty);
       g.stroke();
     }
-    g.restore();
   }
 }
 

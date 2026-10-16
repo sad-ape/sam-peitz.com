@@ -2,14 +2,18 @@
 // lifted off on SpaceX cold-gas thrusters: hold a finger - or the mouse -
 // still on the page for a couple of seconds and the whole website does the
 // same. The thrusters spool up with a hiss and a tremble, the page lifts off
-// on white jets of vapour, wobbles, flies up out of sight ("holy shit." on the
-// ground it left), comes back down, flips right over in mid-air, brakes on
-// the jets and lands where it was, the vapour billowing out along the bottom
-// of the screen and thinning away. The page is <body>, moved by a transform;
-// the vapour and the words are drawn on a canvas outside it, which stays put.
+// on white jets of vapour, wobbles and flies up, flipping right over as it
+// goes, out of sight - and while it's away, in the black it left, the
+// original Roadster drifts by with Starman at the wheel, tumbling slowly, as
+// it has since 2018 (roadster.jpg, a generated picture on black) - then comes
+// back down, brakes on the jets and lands where it was, the vapour billowing
+// out along the bottom of the screen and thinning away. The page is <body>, moved by a
+// transform; the vapour and the Roadster are drawn on a canvas outside it,
+// which stays put.
 
-const FLIGHT = 6.7;                           // seconds, lift-off to touch-down
-const SAYING = 'holy shit.';                  // on the ground it left
+const FLIGHT = 6.9;                           // seconds, lift-off to touch-down
+const DRIFT = [2.0, 4.7];                     // seconds after lift-off: the Roadster crosses
+const CAR = { src: 'roadster.jpg', aspect: 417 / 1200 };
 const NOZZLES = [0.08, 0.3, 0.7, 0.92];       // along the page's bottom edge
 
 export class Liftoff {
@@ -19,6 +23,9 @@ export class Liftoff {
     this.puffs = [];
     this.last = 0;
     this.canvas = null;
+    this.car = new Image();                  // ready long before anyone holds still
+    this.car.src = CAR.src;
+    this.carAt = null;                        // where the Roadster is, while it crosses
   }
 
   get flying() { return this.flight !== null; }
@@ -40,9 +47,16 @@ export class Liftoff {
       ({ y, tilt, thrust } = path(t, innerHeight));
       if (t >= FLIGHT) this.land();
     }
-    // the words on the ground, once there's room for them, in the middle of it
-    this.saying = this.flight ? smooth(80, 260, -y) : 0;
-    this.sayingY = Math.min(Math.max(innerHeight + y / 2, 0.35 * innerHeight), 0.8 * innerHeight);
+    // the Roadster, drifting across the black right to left, nose first
+    this.carAt = null;
+    if (this.flight) {
+      const u = ((now - this.flight.at) / 1000 - DRIFT[0]) / (DRIFT[1] - DRIFT[0]);
+      if (u > 0 && u < 1 && this.car.complete && this.car.naturalWidth) {
+        const W = innerWidth, w = Math.min(0.9 * W, 560);
+        this.carAt = { x: W + w / 2 + 30 - (W + w + 60) * u, y: innerHeight * (0.46 - 0.03 * Math.sin(Math.PI * u)),
+                       w, turn: (7 - 12 * u) * Math.PI / 180 };
+      }
+    }
     // a tremble while the thrusters spool up
     const shake = this.flight ? 0 : this.charge;
     const jx = shake ? (Math.random() - 0.5) * 2 * shake : 0;
@@ -53,7 +67,7 @@ export class Liftoff {
     } else if (body.transform) {
       body.transform = '';
     }
-    if (thrust > 0.01 || this.puffs.length || this.saying > 0) {
+    if (thrust > 0.01 || this.puffs.length || this.carAt) {
       this.show();
       this.emit(thrust, y, tilt, dt);
       this.draw(dt);
@@ -142,15 +156,12 @@ export class Liftoff {
     const g = this.canvas.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    // the words on the ground the page left, under the vapour
-    if (this.saying > 0) {
-      g.setTransform(px, 0, 0, px, 0, 0);
-      g.globalAlpha = 0.9 * this.saying;
-      g.fillStyle = '#ffffff';
-      g.font = '15px ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText(SAYING, innerWidth / 2, this.sayingY);
+    // the Roadster, under the vapour; its black is the black behind it
+    if (this.carAt) {
+      const { x, y, w, turn } = this.carAt, c = Math.cos(turn), s = Math.sin(turn), h = w * CAR.aspect;
+      g.setTransform(px * c, px * s, -px * s, px * c, px * x, px * y);
+      g.globalAlpha = 1;
+      g.drawImage(this.car, -w / 2, -h / 2, w, h);
     }
     for (const p of this.puffs) {
       const fade = 1 - p.age / p.life;
@@ -170,39 +181,25 @@ export class Liftoff {
 /// the thrusters blow.
 function path(t, H) {
   const ease = x => x * x * (3 - 2 * x);
-  const gone = -(H + 360), mid = -0.42 * H;
+  const gone = -(H + 360);
   if (t < 0.9) {                                            // lifting off, unsteady
     const u = t / 0.9;
     return { y: -46 * ease(u), tilt: Math.sin(t * 9) * 0.5 * u, thrust: 1 };
   }
-  if (t < 1.9) {                                            // away, faster and faster
-    const u = (t - 0.9) / 1.0;
-    return { y: -46 + (gone + 46) * u * u, tilt: Math.sin(t * 9) * 0.5 * (1 - u), thrust: 1 };
+  if (t < 2.2) {                                            // up and away, flipping right over as it
+    const u = (t - 0.9) / 1.3;                              // goes, about half off the screen by the end
+    return { y: -46 + (gone + 46) * u * u, tilt: -360 * ease(Math.min(u / 0.85, 1)), thrust: 1 };
   }
-  if (t < 2.5) return { y: gone, tilt: 0, thrust: 0 };     // out of sight
-  if (t < 3.5) {                                            // back down, to a stop in mid-air
-    const u = (t - 2.5) / 1.0;
-    return { y: gone + (mid - gone) * (1 - (1 - u) ** 3), tilt: 0, thrust: 0.3 + 0.5 * u };
+  if (t < 4.8) return { y: gone, tilt: 0, thrust: 0 };     // out of sight: the Roadster goes by
+  if (t < 6.0) {                                            // back down, braking on the thrusters
+    const u = (t - 4.8) / 1.2;
+    return { y: gone + (-34 - gone) * (1 - (1 - u) ** 3), tilt: Math.sin(t * 7) * 0.35 * (1 - u), thrust: 0.4 + 0.6 * u };
   }
-  if (t < 4.6) {                                            // a flip: a hop up and right over
-    const u = (t - 3.5) / 1.1;
-    return { y: mid - 0.12 * H * Math.sin(Math.PI * u), tilt: -360 * ease(u),
-             thrust: 0.55 + 0.45 * Math.abs(Math.sin(2 * Math.PI * u)) };
-  }
-  if (t < 5.8) {                                            // down, braking on the thrusters
-    const u = (t - 4.6) / 1.2;
-    return { y: mid + (-34 - mid) * (1 - (1 - u) ** 3), tilt: Math.sin(t * 7) * 0.35 * (1 - u), thrust: 0.6 + 0.4 * u };
-  }
-  if (t < 6.5) {                                            // a hover, then down onto its feet
-    const u = (t - 5.8) / 0.7;
+  if (t < 6.7) {                                            // a hover, then down onto its feet
+    const u = (t - 6.0) / 0.7;
     return { y: -34 * (1 - ease(u)) + 3 * Math.sin(Math.PI * 2 * u) * (1 - u), tilt: 0, thrust: 1 - u };
   }
   return { y: 0, tilt: 0, thrust: 0 };
-}
-
-function smooth(a, b, x) {
-  const u = Math.min(Math.max((x - a) / (b - a), 0), 1);
-  return u * u * (3 - 2 * u);
 }
 
 /// One soft puff of vapour: white at the heart, a cool grey at its edge so it

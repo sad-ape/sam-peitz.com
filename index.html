@@ -24,8 +24,9 @@
 <style>
   :root { --paper: #F0F5F5; --ink: #121212; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); }
-  /* while the page flies (fly.js) the ground it left shows dark under it */
-  html.flying { background: #101114; }
+  /* while the page flies (fly.js) the ground it left is space - black, the
+     Roadster's picture's own black, so it drifts by with no edges */
+  html.flying { background: #000; }
   #page, #blind { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; height: 100dvh; }
   #page {
     font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;

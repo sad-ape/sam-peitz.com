@@ -24,6 +24,8 @@
 <style>
   :root { --paper: #F0F5F5; --ink: #121212; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); }
+  /* while the page flies (fly.js) the ground it left shows dark under it */
+  html.flying { background: #101114; }
   /* the page and the blind run the whole height of the screen, on under
      Safari's bars too: fixed, Safari cut them off at its bars (under them it
      only carries on a fixed thing's background colour), so they hang from the

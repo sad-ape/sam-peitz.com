@@ -5,6 +5,7 @@ import { BlindsModel, Config, MAX_SLATS } from './blinds.js';
 import { Renderer } from './render.js';
 import { rearrange } from './page.js';
 import { Soundscape } from './sound.js';
+import { Liftoff } from './fly.js';
 
 // Sam's mock: its width, its height and the size of its type (13pt on a
 // 402pt page), in the units the page is laid out in (Sources/App/PageDesign.swift)
@@ -538,7 +539,11 @@ canvas.addEventListener('pointerdown', e => {
   const d = { grip: 'tilt', index: -1, startWorldY: w.y, lastY: w.sy, lastT: e.timeStamp,
               velocity: 0, moved: 0, touch: e.pointerType === 'touch' };
   const handle = model.liftHandle(w.x, w.y);
-  if (broken?.gone) {
+  if (!liftoff.flying && drags.size === 0) steady = { id: e.pointerId, x: e.clientX, y: e.clientY, at: e.timeStamp };
+  else steady = null;                                       // a second finger isn't holding still
+  if (liftoff.flying) {
+    d.grip = 'none';                                        // the page is in the air
+  } else if (broken?.gone) {
     // the blind lies at the bottom: only the page, and the print on it, are left
     d.grip = onPrint(e) ? 'print' : 'none';
     if (d.grip === 'print') grabPrint(e);
@@ -578,6 +583,7 @@ canvas.addEventListener('pointerdown', e => {
 });
 
 canvas.addEventListener('pointermove', e => {
+  if (steady?.id === e.pointerId && Math.hypot(e.clientX - steady.x, e.clientY - steady.y) > 10) steady = null;
   const d = drags.get(e.pointerId);
   if (!d) {
     if (e.pointerType === 'mouse') canvas.style.cursor = cursorAt(e);
@@ -603,6 +609,7 @@ canvas.addEventListener('pointermove', e => {
 });
 
 function finish(e, cancelled) {
+  if (steady?.id === e.pointerId) steady = null;
   const d = drags.get(e.pointerId);
   if (!d) return;
   drags.delete(e.pointerId);
@@ -988,9 +995,38 @@ function matchBars(now) {
   }
 }
 
+// ------------------------------------------------------------ lift-off
+
+/// An Easter egg (fly.js): a finger - or the mouse - held still on the page
+/// spools up the thrusters, and after two seconds the whole website lifts
+/// off, flies up out of sight and lands again. Letting go before then, or
+/// moving, calls it off.
+const liftoff = new Liftoff();
+let steady = null;              // the finger held still: which, where, since when
+const SPOOL = [0.5, 2.0];       // seconds held: the thrusters start to stir, and fire
+
+function holdOn(now) {
+  const held = steady ? (now - steady.at) / 1000 : 0;
+  liftoff.charge = steady ? Math.min(Math.max((held - SPOOL[0]) / (SPOOL[1] - SPOOL[0]), 0), 1) : 0;
+  if (liftoff.charge < 1) return;
+  // off it goes: whatever the hand had hold of lets go, and the lift of the
+  // finger afterwards is no tap
+  for (const d of drags.values()) {
+    if (d.grip === 'bend') model.endBend(d.index);
+    else if (d.grip === 'lift') model.endLift(d.index);
+    d.grip = 'none';
+    d.moved = 1e9;
+  }
+  steady = null;
+  liftoff.charge = 0;
+  liftoff.launch(now);
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   settle(now);
+  holdOn(now);
+  sound.thrust(liftoff.step(now));
   if (starsIn !== null && !sparkled) sparkled = sparkle(tech.stars, starsIn, now);
 
   if (print.glide) {

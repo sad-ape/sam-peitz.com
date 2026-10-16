@@ -324,6 +324,27 @@ export class Soundscape {
                   pan: (Math.random() - 0.5) * 0.4 });
   }
 
+  /// The thrusters (an Easter egg, fly.js): cold gas blowing - a loud, wide
+  /// hiss, roughened a little - as hard as they blow, 0..1.
+  thrust(level) {
+    if (!this.live || (!this.thrustGain && level <= 0)) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    if (!this.thrustGain) {
+      const hiss = ctx.createBiquadFilter();
+      hiss.type = 'highpass';
+      hiss.frequency.value = 700;
+      const edge = ctx.createBiquadFilter();
+      edge.type = 'peaking';
+      edge.frequency.value = 3200;
+      edge.Q.value = 0.7;
+      edge.gain.value = 6;
+      this.thrustGain = ctx.createGain();
+      this.thrustGain.gain.value = 0;
+      loop(ctx, this.noise).connect(hiss).connect(edge).connect(this.thrustGain).connect(this.near);
+    }
+    this.thrustGain.gain.setTargetAtTime(0.35 * level * (0.85 + Math.random() * 0.3), now, level > 0 ? 0.04 : 0.15);
+  }
+
   /// A pull taken in hand: a small, dull plastic tock.
   grab() { this.strike({ level: 0.05, pitch: 0.45, ring: 0.015, tone: 0.15, knock: 0.5, pan: 0.3 }); }
 

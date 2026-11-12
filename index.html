@@ -20,6 +20,10 @@
 <meta property="og:image:alt" content="Sam's Website, written by hand in blue">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#ffffff">
+<script>
+  // an experiment: ?divs shows the page as the machine sees it
+  if (new URLSearchParams(location.search).has('divs')) document.documentElement.classList.add('divs');
+</script>
 <style>
   /* Sam's page as he drew it in Figma ("1992", 402 x 874 - a phone's whole
      screen): one drawing, website.svg, as exported. Its points are the unit
@@ -37,7 +41,17 @@
     width: var(--w);
   }
   .page img { display: block; width: 100%; height: auto; }
+  /* the drawn title, as boxes round its words (the drawing's own bounds, a
+     little padding; the boxes holding others leave room at the top for their
+     children's tags) - the heading for screen readers, and something for the
+     machine's view below to outline */
+  .title { position: absolute; left: calc(77.2 * var(--u)); top: calc(284.9 * var(--u)); width: calc(246.8 * var(--u)); height: calc(191.3 * var(--u)); }
+  .word, .bloom { position: absolute; }
+  .sams { left: calc(6 * var(--u)); top: calc(16 * var(--u)); width: calc(159.6 * var(--u)); height: calc(84.5 * var(--u)); }
+  .site { left: calc(23.7 * var(--u)); top: calc(109.8 * var(--u)); width: calc(217.1 * var(--u)); height: calc(75.5 * var(--u)); }
+  .bloom { left: calc(144.6 * var(--u)); top: calc(31.9 * var(--u)); width: calc(19.9 * var(--u)); height: calc(36.3 * var(--u)); }
   /* the links: a fingertip round each of X, ig, Li and the flower */
+  .links { position: absolute; left: calc(75 * var(--u)); top: calc(630 * var(--u)); width: calc(222.3 * var(--u)); height: calc(123 * var(--u)); }
   .page a {
     position: absolute;
     width: calc(44 * var(--u));
@@ -46,21 +60,42 @@
     -webkit-tap-highlight-color: transparent;
   }
   .page a:focus-visible { outline: 1px dotted #0000ff; }
-  .x { left: calc(81 * var(--u)); top: calc(648.6 * var(--u)); }
-  .ig { left: calc(146.8 * var(--u)); top: calc(672 * var(--u)); }
-  .li { left: calc(210.6 * var(--u)); top: calc(646 * var(--u)); }
-  .flower { left: calc(247.3 * var(--u)); top: calc(703 * var(--u)); }
+  .x { left: calc(6 * var(--u)); top: calc(18.6 * var(--u)); }
+  .ig { left: calc(71.8 * var(--u)); top: calc(42 * var(--u)); }
+  .li { left: calc(135.6 * var(--u)); top: calc(16 * var(--u)); }
+  .flower { left: calc(172.3 * var(--u)); top: calc(73 * var(--u)); }
   .hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* An experiment (?divs): the page as the machine sees it - every box
+     outlined in the drawing's blue, a faint wash inside, its tag on a chip
+     sitting on its top left corner, as a browser's inspector shows them */
+  .divs .box { outline: 1px solid #0000ff; background: rgba(0, 0, 255, 0.03); }
+  .divs .page a { border-radius: 0; }
+  .divs .box::before {
+    content: attr(data-tag);
+    position: absolute;
+    left: -1px;
+    bottom: 100%;
+    padding: 2px 4px 1px;
+    font: 10px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    color: #fff;
+    background: #0000ff;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
-<main class="page">
-  <h1 class="hidden">Sam's Website</h1>
+<main class="page box" data-tag="main">
   <img src="website.svg" width="402" height="874" alt="">
-  <a class="x" href="https://x.com/samdape" target="_blank" rel="noopener" aria-label="X"></a>
-  <a class="ig" href="https://www.instagram.com/sam.dape/" target="_blank" rel="noopener" aria-label="Instagram"></a>
-  <a class="li" href="https://www.linkedin.com/in/samuel-peitz/" target="_blank" rel="noopener" aria-label="LinkedIn"></a>
-  <a class="flower" href="https://apps.apple.com/us/app/one-year-daily-journal/id6740510762" target="_blank" rel="noopener" aria-label="One Year"></a>
+  <div class="title box" data-tag="div" role="heading" aria-level="1">
+    <div class="word sams box" data-tag="div"><span class="hidden">Sam's</span></div>
+    <div class="word site box" data-tag="div"><span class="hidden">Website</span><div class="bloom box" data-tag="div"></div></div>
+  </div>
+  <nav class="links box" data-tag="nav">
+    <a class="x box" data-tag="a" href="https://x.com/samdape" target="_blank" rel="noopener" aria-label="X"></a>
+    <a class="ig box" data-tag="a" href="https://www.instagram.com/sam.dape/" target="_blank" rel="noopener" aria-label="Instagram"></a>
+    <a class="li box" data-tag="a" href="https://www.linkedin.com/in/samuel-peitz/" target="_blank" rel="noopener" aria-label="LinkedIn"></a>
+    <a class="flower box" data-tag="a" href="https://apps.apple.com/us/app/one-year-daily-journal/id6740510762" target="_blank" rel="noopener" aria-label="One Year"></a>
+  </nav>
 </main>
 </body>
 </html>

@@ -21,7 +21,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#ffffff">
 <script>
-  // an experiment: ?divs shows the page as the machine sees it
+  // the page as the machine sees it: the flower in Website turns it on and
+  // off (below), and ?divs opens the page with it on
   if (new URLSearchParams(location.search).has('divs')) document.documentElement.classList.add('divs');
 </script>
 <style>
@@ -46,10 +47,18 @@
      children's tags) - the heading for screen readers, and something for the
      machine's view below to outline */
   .title { position: absolute; left: calc(77.2 * var(--u)); top: calc(284.9 * var(--u)); width: calc(246.8 * var(--u)); height: calc(191.3 * var(--u)); }
-  .word, .bloom { position: absolute; }
+  .word { position: absolute; }
   .sams { left: calc(6 * var(--u)); top: calc(16 * var(--u)); width: calc(159.6 * var(--u)); height: calc(84.5 * var(--u)); }
   .site { left: calc(23.7 * var(--u)); top: calc(109.8 * var(--u)); width: calc(217.1 * var(--u)); height: calc(75.5 * var(--u)); }
-  .bloom { left: calc(144.6 * var(--u)); top: calc(31.9 * var(--u)); width: calc(19.9 * var(--u)); height: calc(36.3 * var(--u)); }
+  /* the flower that is Website's i: a button, a fingertip round it */
+  .bloom {
+    position: absolute;
+    left: calc(144.6 * var(--u)); top: calc(31.9 * var(--u)); width: calc(19.9 * var(--u)); height: calc(36.3 * var(--u));
+    margin: 0; padding: 0; border: 0; background: none; appearance: none; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bloom::after { content: ''; position: absolute; inset: calc(-4 * var(--u)) calc(-12 * var(--u)); }
+  .bloom:focus-visible { outline: 1px dotted #0000ff; }
   /* the links: a fingertip round each of X, ig, Li and the flower */
   .links { position: absolute; left: calc(75 * var(--u)); top: calc(630 * var(--u)); width: calc(222.3 * var(--u)); height: calc(123 * var(--u)); }
   .page a {
@@ -65,12 +74,12 @@
   .li { left: calc(135.6 * var(--u)); top: calc(16 * var(--u)); }
   .flower { left: calc(172.3 * var(--u)); top: calc(73 * var(--u)); }
   .hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  /* An experiment (?divs): the page as the machine sees it - every box
+  /* The page as the machine sees it (.divs, from the flower): every box
      outlined in the drawing's blue, a faint wash inside, its tag on a chip
-     sitting on its top left corner, as a browser's inspector shows them */
-  .divs .box { outline: 1px solid #0000ff; background: rgba(0, 0, 255, 0.03); }
-  .divs .page a { border-radius: 0; }
-  .divs .box::before {
+     sitting on its top left corner, as a browser's inspector shows them -
+     fading in and out */
+  .box { outline: 1px solid transparent; transition: outline-color 0.2s, background-color 0.2s; }
+  .box::before {
     content: attr(data-tag);
     position: absolute;
     left: -1px;
@@ -80,7 +89,12 @@
     color: #fff;
     background: #0000ff;
     pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
   }
+  .divs .box { outline-color: #0000ff; background-color: rgba(0, 0, 255, 0.03); }
+  .divs .box::before { opacity: 1; }
+  .divs .page a { border-radius: 0; }
 </style>
 </head>
 <body>
@@ -88,7 +102,7 @@
   <img src="website.svg" width="402" height="874" alt="">
   <div class="title box" data-tag="div" role="heading" aria-level="1">
     <div class="word sams box" data-tag="div"><span class="hidden">Sam's</span></div>
-    <div class="word site box" data-tag="div"><span class="hidden">Website</span><div class="bloom box" data-tag="div"></div></div>
+    <div class="word site box" data-tag="div"><span class="hidden">Website</span><button class="bloom box" data-tag="button" type="button" aria-label="Show the boxes" aria-pressed="false"></button></div>
   </div>
   <nav class="links box" data-tag="nav">
     <a class="x box" data-tag="a" href="https://x.com/samdape" target="_blank" rel="noopener" aria-label="X"></a>
@@ -97,5 +111,11 @@
     <a class="flower box" data-tag="a" href="https://apps.apple.com/us/app/one-year-daily-journal/id6740510762" target="_blank" rel="noopener" aria-label="One Year"></a>
   </nav>
 </main>
+<script>
+  const bloom = document.querySelector('.bloom');
+  const show = on => { document.documentElement.classList.toggle('divs', on); bloom.setAttribute('aria-pressed', on); };
+  show(document.documentElement.classList.contains('divs'));
+  bloom.addEventListener('click', () => show(!document.documentElement.classList.contains('divs')));
+</script>
 </body>
 </html>

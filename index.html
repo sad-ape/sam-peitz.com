@@ -9,15 +9,18 @@
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<!-- the card a shared link shows: the page's drawing -->
+<!-- the card a shared link shows: the page's drawing in white on its blue
+     (Tools/og-card.mjs; the ?v= number goes up with each new card, so apps
+     that keep the old picture fetch the new one) -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.sam-peitz.com/">
 <meta property="og:title" content="Sam's Website">
 <meta property="og:description" content="Sam's website.">
-<meta property="og:image" content="https://www.sam-peitz.com/og.png">
+<meta property="og:image" content="https://www.sam-peitz.com/og.png?v=2">
+<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Sam's Website, written by hand in blue">
+<meta property="og:image:alt" content="Sam's Website, written by hand in white on blue, with a flower, a stack of pages, X, ig and Li drawn round it">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#ffffff">
 <script>
@@ -31,7 +34,8 @@
      here (--u), so the numbers below are the design's. On a phone 402 wide
      it sits where it was drawn, its top 62 under the status bar; elsewhere
      it scales to the width, or to the height from under the status bar to
-     just past the flower (62 to 760), whichever is tighter, centred across. */
+     760 (62 to 760, the drawing about centred in it), whichever is tighter,
+     centred across. */
   html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
   .page {
     --w: min(100vw, 100dvh * 402 / 698);
@@ -59,8 +63,9 @@
   }
   .bloom::after { content: ''; position: absolute; inset: calc(-4 * var(--u)) calc(-12 * var(--u)); }
   .bloom:focus-visible { outline: 1px dotted #0000ff; }
-  /* the links: a fingertip round each of X, ig, Li, the pages (essays) and the flower */
-  .links { position: absolute; left: calc(75 * var(--u)); top: calc(625.9 * var(--u)); width: calc(249 * var(--u)); height: calc(127.1 * var(--u)); }
+  /* the links: a fingertip round each of X, ig, Li, the pages (essays) and the
+     flower, scattered round the title as drawn - so the nav is no box itself */
+  .links { display: contents; }
   .page a {
     position: absolute;
     width: calc(44 * var(--u));
@@ -69,11 +74,11 @@
     -webkit-tap-highlight-color: transparent;
   }
   .page a:focus-visible { outline: 1px dotted #0000ff; }
-  .x { left: calc(6 * var(--u)); top: calc(22.7 * var(--u)); }
-  .ig { left: calc(71.8 * var(--u)); top: calc(46.1 * var(--u)); }
-  .li { left: calc(135.6 * var(--u)); top: calc(20.1 * var(--u)); }
-  .essays { left: calc(199 * var(--u)); top: calc(16 * var(--u)); }
-  .flower { left: calc(172.3 * var(--u)); top: calc(77.1 * var(--u)); }
+  .x { left: calc(45.9 * var(--u)); top: calc(472 * var(--u)); }
+  .ig { left: calc(155 * var(--u)); top: calc(538.5 * var(--u)); }
+  .li { left: calc(265.9 * var(--u)); top: calc(532.5 * var(--u)); }
+  .essays { left: calc(269.5 * var(--u)); top: calc(273.1 * var(--u)); }
+  .flower { left: calc(111.1 * var(--u)); top: calc(219.4 * var(--u)); }
   .hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   /* The page as the machine sees it (.divs, from the flower): every box
      outlined in the drawing's blue, a faint wash inside, its tag on a chip
@@ -105,7 +110,7 @@
     <div class="word sams box" data-tag="div"><span class="hidden">Sam's</span></div>
     <div class="word site box" data-tag="div"><span class="hidden">Website</span><button class="bloom box" data-tag="button" type="button" aria-label="Show the boxes" aria-pressed="false"></button></div>
   </div>
-  <nav class="links box" data-tag="nav">
+  <nav class="links">
     <a class="x box" data-tag="a" href="https://x.com/samdape" target="_blank" rel="noopener" aria-label="X"></a>
     <a class="ig box" data-tag="a" href="https://www.instagram.com/sam.dape/" target="_blank" rel="noopener" aria-label="Instagram"></a>
     <a class="li box" data-tag="a" href="https://www.linkedin.com/in/samuel-peitz/" target="_blank" rel="noopener" aria-label="LinkedIn"></a>

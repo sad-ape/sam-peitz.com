@@ -59,8 +59,8 @@
   }
   .bloom::after { content: ''; position: absolute; inset: calc(-4 * var(--u)) calc(-12 * var(--u)); }
   .bloom:focus-visible { outline: 1px dotted #0000ff; }
-  /* the links: a fingertip round each of X, ig, Li and the flower */
-  .links { position: absolute; left: calc(75 * var(--u)); top: calc(630 * var(--u)); width: calc(222.3 * var(--u)); height: calc(123 * var(--u)); }
+  /* the links: a fingertip round each of X, ig, Li, the pages (essays) and the flower */
+  .links { position: absolute; left: calc(75 * var(--u)); top: calc(625.9 * var(--u)); width: calc(249 * var(--u)); height: calc(127.1 * var(--u)); }
   .page a {
     position: absolute;
     width: calc(44 * var(--u));
@@ -69,10 +69,11 @@
     -webkit-tap-highlight-color: transparent;
   }
   .page a:focus-visible { outline: 1px dotted #0000ff; }
-  .x { left: calc(6 * var(--u)); top: calc(18.6 * var(--u)); }
-  .ig { left: calc(71.8 * var(--u)); top: calc(42 * var(--u)); }
-  .li { left: calc(135.6 * var(--u)); top: calc(16 * var(--u)); }
-  .flower { left: calc(172.3 * var(--u)); top: calc(73 * var(--u)); }
+  .x { left: calc(6 * var(--u)); top: calc(22.7 * var(--u)); }
+  .ig { left: calc(71.8 * var(--u)); top: calc(46.1 * var(--u)); }
+  .li { left: calc(135.6 * var(--u)); top: calc(20.1 * var(--u)); }
+  .essays { left: calc(199 * var(--u)); top: calc(16 * var(--u)); }
+  .flower { left: calc(172.3 * var(--u)); top: calc(77.1 * var(--u)); }
   .hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   /* The page as the machine sees it (.divs, from the flower): every box
      outlined in the drawing's blue, a faint wash inside, its tag on a chip
@@ -108,6 +109,7 @@
     <a class="x box" data-tag="a" href="https://x.com/samdape" target="_blank" rel="noopener" aria-label="X"></a>
     <a class="ig box" data-tag="a" href="https://www.instagram.com/sam.dape/" target="_blank" rel="noopener" aria-label="Instagram"></a>
     <a class="li box" data-tag="a" href="https://www.linkedin.com/in/samuel-peitz/" target="_blank" rel="noopener" aria-label="LinkedIn"></a>
+    <a class="essays box" data-tag="a" href="/writings" aria-label="Essays"></a>
     <a class="flower box" data-tag="a" href="https://oneyear.garden/" target="_blank" rel="noopener" aria-label="One Year"></a>
   </nav>
 </main>

@@ -64,17 +64,16 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  /* Top left, the name and under it the time with the sun or moon (day or dark; a tap switches
-     it); bottom left, the one line (Sam's Figma, 19 Nov). */
-  .top, .bottom {
+  /* Along the top: on the left the name and under it the time with the sun or moon (day or dark; a
+     tap switches it); the one line beside it, left-aligned, starting at the page's middle (Sam). */
+  .top, .line {
     position: absolute;
     z-index: 2;
-    left: max(24px, env(safe-area-inset-left, 0px));
-    right: max(24px, env(safe-area-inset-right, 0px));
+    top: calc(env(safe-area-inset-top, 0px) + 20px);
     pointer-events: none;
   }
-  .top { top: calc(env(safe-area-inset-top, 0px) + 20px); }
-  .bottom { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
+  .top { left: max(24px, env(safe-area-inset-left, 0px)); right: 50%; }
+  .line { left: 50%; right: max(24px, env(safe-area-inset-right, 0px)); }
   .when { display: flex; align-items: center; gap: 10px; }
   p { margin: 0; text-wrap: pretty; }
   .clock { font-variant-numeric: tabular-nums; }
@@ -148,9 +147,7 @@
     </button>
   </div>
 </div>
-<div class="bottom">
-  <p class="line">A place to drop<br>your memories into.</p>
-</div>
+<p class="line">A place to drop<br>your memories into.</p>
 <div class="grain" aria-hidden="true"></div>
 <div class="tint at-top" aria-hidden="true"></div>
 <div class="tint at-bottom" aria-hidden="true"></div>

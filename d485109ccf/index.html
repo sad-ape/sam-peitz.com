@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>Memory Pond</title>
-<meta name="description" content="A pond to drop your memories into.">
+<meta name="description" content="A place to drop your memories into.">
 <script>
   // Day or dark before anything shows, so Safari's bars take the right colour from the start (the
   // pond's own code arrives a moment later and keeps it after): the sun's height where the
@@ -64,16 +64,17 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  /* Top left, one above the other: the time with the sun or moon (day or dark; a tap switches it),
-     the name, its one line. */
-  .top {
+  /* Top left, the name and under it the time with the sun or moon (day or dark; a tap switches
+     it); bottom left, the one line (Sam's Figma, 19 Nov). */
+  .top, .bottom {
     position: absolute;
     z-index: 2;
-    top: calc(env(safe-area-inset-top, 0px) + 20px);
     left: max(24px, env(safe-area-inset-left, 0px));
     right: max(24px, env(safe-area-inset-right, 0px));
     pointer-events: none;
   }
+  .top { top: calc(env(safe-area-inset-top, 0px) + 20px); }
+  .bottom { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
   .when { display: flex; align-items: center; gap: 10px; }
   p { margin: 0; text-wrap: pretty; }
   .clock { font-variant-numeric: tabular-nums; }
@@ -120,6 +121,7 @@
 
 <canvas class="pond" aria-label="The pond from Memory Pond: touch the water"></canvas>
 <div class="top">
+  <p class="name">Memory Pond</p>
   <div class="when">
     <span class="clock"></span>
     <button class="switch" type="button" aria-label="Day or night">
@@ -127,8 +129,9 @@
       <svg class="moon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><path d="M13.3 10.2A5.7 5.7 0 0 1 5.8 2.7a5.7 5.7 0 1 0 7.5 7.5z"/></svg>
     </button>
   </div>
-  <p class="name">Memory Pond</p>
-  <p class="line">A pond to drop your memories into.</p>
+</div>
+<div class="bottom">
+  <p class="line">A place to drop<br>your memories into.</p>
 </div>
 <div class="grain" aria-hidden="true"></div>
 

@@ -7,12 +7,13 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>Memory Pond</title>
-<meta name="description" content="Drop your day in. The pond writes it back, in your own words.">
+<meta name="description" content="Your personal memory pond.">
 <style>
-  /* One look on purpose: warm white paper, the app's own pond, the app's grey mono labels. */
+  /* One look on purpose: warm white paper by day, the app's night paper in the dark, the app's own
+     pond, the app's grey mono labels. pond.js sets --page and --ink to its canvas's own colours. */
   :root {
-    --page: #fcfaf6;                /* pond.js draws its canvas's page in exactly this colour */
-    --ink: #5e5e5e;                 /* the app's label ink */
+    --page: #fcfaf6;
+    --ink: #5e5e5e;
     color-scheme: light;
   }
   /* One screen that never scrolls, so a finger in the water moves the water. */
@@ -40,16 +41,33 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  header, main { position: absolute; z-index: 2; }
-  header { top: calc(env(safe-area-inset-top, 0px) + 24px); left: 0; right: 0; text-align: center; pointer-events: none; }
-  main {
+  /* The time and the sun or moon along the top, the name in the bottom left. */
+  .top, .bottom {
+    position: absolute;
+    z-index: 2;
     left: max(24px, env(safe-area-inset-left, 0px));
     right: max(24px, env(safe-area-inset-right, 0px));
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
-    max-width: 30ch;
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
   }
-  p { margin: 0 0 1.7em; text-wrap: pretty; }
-  p:last-child { margin-bottom: 0; }
+  .top { top: calc(env(safe-area-inset-top, 0px) + 20px); align-items: center; }
+  .bottom { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); align-items: flex-end; }
+  p { margin: 0; text-wrap: pretty; }
+  .name { white-space: nowrap; }
+  .clock { font-variant-numeric: tabular-nums; }
+  .switch {
+    margin: -8px;
+    padding: 8px;
+    border: 0;
+    background: none;
+    color: inherit;
+    line-height: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .switch svg { display: block; }
+  .switch[data-dark="1"] .sun, .switch:not([data-dark="1"]) .moon { display: none; }
   /* Film grain, laid over the pond's colours only: soft light leaves the paper as it is, so the
      page meets the browser's bars without an edge. */
   .grain {
@@ -57,7 +75,7 @@
     inset: -120px;
     z-index: 1;
     pointer-events: none;
-    opacity: .45;
+    opacity: .28;
     mix-blend-mode: soft-light;
     animation: grain 1s steps(1) infinite;
   }
@@ -79,11 +97,16 @@
 <body>
 
 <canvas class="pond" aria-label="The pond from Memory Pond: touch the water"></canvas>
-<header>Memory Pond</header>
-<main>
-  <p>Drop your day in. The pond writes it back, in your own words.</p>
-  <p>On TestFlight now.</p>
-</main>
+<div class="top">
+  <span class="clock"></span>
+  <button class="switch" type="button" aria-label="Day or night">
+    <svg class="sun" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M3.3 12.7l1.2-1.2M11.5 4.5l1.2-1.2"/></svg>
+    <svg class="moon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><path d="M13.3 10.2A5.7 5.7 0 0 1 5.8 2.7a5.7 5.7 0 1 0 7.5 7.5z"/></svg>
+  </button>
+</div>
+<div class="bottom">
+  <p class="name">Memory Pond</p>
+</div>
 <div class="grain" aria-hidden="true"></div>
 
 <script>
@@ -114,7 +137,7 @@
     const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
     const { startPond } = await import(url);
     URL.revokeObjectURL(url);
-    window.pond = startPond(canvas, undefined, { onError: () => { canvas.hidden = true; } });
+    window.pond = startPond(canvas, undefined, { clock: document.querySelector('.clock'), switcher: document.querySelector('.switch'), onError: () => { canvas.hidden = true; } });
   } catch { canvas.hidden = true; }
 </script>
 </body>

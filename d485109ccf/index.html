@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Memory Pond</title>
+<meta name="description" content="Drop your day into the pond: a sentence, a voice note, a few photos. Memory Pond writes it back to you in your own words.">
+<style>
+  /* One look on purpose: white paper, the app's own pond, the app's grey mono labels. */
+  :root {
+    --page: #ffffff;
+    --ink: #5e5e5e;                 /* the app's label ink */
+    color-scheme: light;
+  }
+  html, body { background: var(--page); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font: 500 12px/1.7 ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  /* One screen: the name at the top, the pond in the middle, the words in the bottom left. */
+  .page {
+    min-height: 100svh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: clip;
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+  }
+  header { position: relative; z-index: 2; padding-block: 28px 0; text-align: center; pointer-events: none; }
+  /* The pond, live: the app's own water running here, set into the page. Its canvas (660 x 740
+     pt) is the pond with room round it for its haze, so it may run under the name and the words
+     and off a phone's sides: that room is white. */
+  .hero { position: relative; container-type: size; min-height: 320px; }
+  .pond {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(660px, 157vw);
+    width: min(660px, 157vw, calc(130cqh * 660 / 740));
+    aspect-ratio: 660 / 740;
+    touch-action: pan-y;            /* a finger in the water; a swipe up still scrolls */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  main {
+    position: relative;
+    z-index: 2;
+    max-width: 36ch;
+    padding-block: 0 max(28px, env(safe-area-inset-bottom, 0px));
+  }
+  p { margin: 0 0 1.7em; text-wrap: pretty; }
+  p:last-child { margin-bottom: 0; }
+  /* Film grain over the page and the pond, under the words. */
+  .grain {
+    position: fixed;
+    inset: -120px;
+    z-index: 1;
+    pointer-events: none;
+    opacity: .06;
+    animation: grain 1s steps(1) infinite;
+  }
+  @keyframes grain {
+    0% { transform: translate(0, 0) }
+    10% { transform: translate(-31px, 17px) }
+    20% { transform: translate(23px, -41px) }
+    30% { transform: translate(-47px, -9px) }
+    40% { transform: translate(11px, 37px) }
+    50% { transform: translate(-19px, -27px) }
+    60% { transform: translate(43px, 13px) }
+    70% { transform: translate(-7px, 47px) }
+    80% { transform: translate(29px, -19px) }
+    90% { transform: translate(-41px, 31px) }
+  }
+  @media (prefers-reduced-motion: reduce) { .grain { animation: none } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>Memory Pond</header>
+  <div class="hero">
+    <canvas class="pond" aria-label="The pond from Memory Pond: touch the water"></canvas>
+  </div>
+  <main>
+    <p>Most days slip by without a trace. Memory Pond is a quiet place to drop them in: a sentence, a voice note, a few photos.</p>
+    <p>When the day goes quiet, the pond writes it back to you, in your own words.</p>
+    <p>On TestFlight now.</p>
+  </main>
+</div>
+
+<div class="grain" aria-hidden="true"></div>
+
+<script>
+  // The grain: one small tile of noise, drawn here instead of shipped.
+  (() => {
+    const size = 128, tile = document.createElement('canvas');
+    tile.width = tile.height = size;
+    const pen = tile.getContext('2d'), noise = pen.createImageData(size, size), d = noise.data;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = d[i + 1] = d[i + 2] = 96 + Math.random() * 160 | 0;   // light-leaning, so the white stays white
+      d[i + 3] = 255;
+    }
+    pen.putImageData(noise, 0, 0);
+    const grain = document.querySelector('.grain');
+    grain.style.backgroundImage = `url(${tile.toDataURL()})`;
+    grain.style.backgroundSize = `${size / Math.min(2, window.devicePixelRatio || 1)}px`;
+  })();
+</script>
+<script type="module">
+  // The pond comes encrypted: the key is the link's end (after #), never stored here.
+  const canvas = document.querySelector('.pond');
+  try {
+    const hex = location.hash.slice(1);
+    if (!/^[0-9a-f]{64}$/.test(hex)) throw new Error('no key');
+    const key = await crypto.subtle.importKey('raw', new Uint8Array(hex.match(/../g).map((b) => parseInt(b, 16))), 'AES-GCM', false, ['decrypt']);
+    const data = new Uint8Array(await (await fetch('pond.bin', { cache: 'no-cache' })).arrayBuffer());
+    const code = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: data.slice(0, 12) }, key, data.slice(12));
+    const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    const { startPond } = await import(url);
+    URL.revokeObjectURL(url);
+    window.pond = startPond(canvas, undefined, { onError: () => { canvas.hidden = true; } });
+  } catch { canvas.hidden = true; }
+</script>
+</body>
+</html>

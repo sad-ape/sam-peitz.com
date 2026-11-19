@@ -64,18 +64,32 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  /* The name at the top and the one line at the bottom, both centred. */
-  .top, .bottom {
+  /* Top left, one above the other: the time with the sun or moon (day or dark; a tap switches it),
+     the name, its one line. */
+  .top {
     position: absolute;
     z-index: 2;
+    top: calc(env(safe-area-inset-top, 0px) + 20px);
     left: max(24px, env(safe-area-inset-left, 0px));
     right: max(24px, env(safe-area-inset-right, 0px));
-    text-align: center;
     pointer-events: none;
   }
-  .top { top: calc(env(safe-area-inset-top, 0px) + 24px); }
-  .bottom { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
+  .when { display: flex; align-items: center; gap: 10px; }
   p { margin: 0; text-wrap: pretty; }
+  .clock { font-variant-numeric: tabular-nums; }
+  .switch {
+    margin: -8px;
+    padding: 8px;
+    border: 0;
+    background: none;
+    color: inherit;
+    line-height: 0;
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .switch svg { display: block; }
+  .switch[data-dark="1"] .sun, .switch:not([data-dark="1"]) .moon { display: none; }
   /* Film grain, laid over the pond's colours only: soft light leaves the paper as it is, so the
      page meets the browser's bars without an edge. */
   .grain {
@@ -106,9 +120,14 @@
 
 <canvas class="pond" aria-label="The pond from Memory Pond: touch the water"></canvas>
 <div class="top">
+  <div class="when">
+    <span class="clock"></span>
+    <button class="switch" type="button" aria-label="Day or night">
+      <svg class="sun" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M3.3 12.7l1.2-1.2M11.5 4.5l1.2-1.2"/></svg>
+      <svg class="moon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><path d="M13.3 10.2A5.7 5.7 0 0 1 5.8 2.7a5.7 5.7 0 1 0 7.5 7.5z"/></svg>
+    </button>
+  </div>
   <p class="name">Memory Pond</p>
-</div>
-<div class="bottom">
   <p class="line">A pond to drop your memories into.</p>
 </div>
 <div class="grain" aria-hidden="true"></div>

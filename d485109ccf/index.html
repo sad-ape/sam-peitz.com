@@ -91,6 +91,24 @@
   }
   .switch svg { display: block; }
   .switch[data-dark="1"] .sun, .switch:not([data-dark="1"]) .moon { display: none; }
+  /* What Safari tints its bars from: since Safari 26 it ignores theme-color and takes the colour of
+     what's fixed at the screen's top and bottom edges (and not again when the page's own background
+     changes). So two thin strips there, in the page's colour, masked invisible: as day and dark
+     switch, pond.js recolours them and the bars follow. */
+  .tint {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 89%;
+    height: 11px;
+    background: var(--page);
+    pointer-events: none;
+    z-index: 999;
+    -webkit-mask-image: linear-gradient(to right, transparent, transparent);
+    mask-image: linear-gradient(to right, transparent, transparent);
+  }
+  .tint.at-top { top: 4px; }
+  .tint.at-bottom { bottom: 3px; }
   /* Film grain, laid over the pond's colours only: soft light leaves the paper as it is, so the
      page meets the browser's bars without an edge. */
   .grain {
@@ -134,6 +152,8 @@
   <p class="line">A place to drop<br>your memories into.</p>
 </div>
 <div class="grain" aria-hidden="true"></div>
+<div class="tint at-top" aria-hidden="true"></div>
+<div class="tint at-bottom" aria-hidden="true"></div>
 
 <script>
   // The grain: one small tile of noise round the middle grey, drawn here instead of shipped.

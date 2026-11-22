@@ -31,9 +31,12 @@
   .car svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
   .car path { fill: none; stroke: #000; stroke-width: 1px; stroke-linejoin: round; }
   .car path.hit { fill: transparent; stroke: none; pointer-events: all; cursor: pointer; }
-  /* the floor, where you stand and write: a grid of letters */
-  .floor { position: absolute; font-family: "Courier New", Courier, monospace; text-align: left; }
-  .floor > * { position: absolute; left: calc(var(--c) * var(--cw)); top: calc(var(--r) * var(--lh)); }
+  /* the floor, where you stand and write, in the page's own Times: each
+     letter set where it was typed (x ems across, line r down) */
+  .floor { position: absolute; text-align: left; }
+  .floor > * { position: absolute; left: calc(var(--x) * 1em); top: calc(var(--r) * var(--lh)); }
+  .floor > .notice { left: 0; width: 100%; top: calc(50% - var(--lh)); text-align: center; transition: filter 1.5s, opacity 1.5s; }
+  .floor > .notice.fade { filter: blur(5px); opacity: 0; }
   .floor span { white-space: pre; color: #0000EE; transition: filter 1.5s, opacity 1.5s; }   /* yours in link blue, theirs in black */
   .floor span.fade { filter: blur(5px); opacity: 0; }
   .floor .them { color: #000; }
@@ -51,7 +54,7 @@
 <p><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="what" aria-label="What is this?">?</a></p>
 <p class="about" hidden>You are stuck with a stranger in an elevator. Tap the floor to write. Nothing you write is stored.<span class="total" hidden><br><br><span class="sofar"></span> people have been stuck in here so far.</span><br><br>A digital experience by <a href="https://x.com/samdape" target="_blank" rel="noopener">Sam</a>.</p>
 <script>
-const COLS = 26, ROWS = 16;   // the floor, in letters
+const FLOOR_W = 15.6, ROWS = 16;   // the floor: its width in ems of the writing, its depth in lines
 const S = 0.62;               // the floor's size against the walls' tops: how far down you look
 const MAX_H = 460;            // px: the elevator's tallest, so it stays small on a big screen
 const LIFE = 3500;            // ms a letter stays before it blurs away (1.5 s more)
@@ -77,23 +80,18 @@ function draw(W, H) {
 
 // As big as fits, with room at the sides, never taller than MAX_H, and the
 // whole page in the window's height
-let cw, lh;
+let em, lh;
 function fit() {
-  const probe = Object.assign(document.createElement('span'), { textContent: 'M'.repeat(10) });
-  floor.style.fontSize = '100px'; floor.append(probe);
-  const ratio = probe.getBoundingClientRect().width / 1000;
-  probe.remove();
   const size = fs => {
-    cw = fs * ratio; lh = fs * 1.2;
-    const fw = COLS * cw, fh = ROWS * lh, W = fw / S, H = fh / S;
+    em = fs; lh = fs * 1.2;
+    const fw = FLOOR_W * em, fh = ROWS * lh, W = fw / S, H = fh / S;
     car.style.width = W + 'px'; car.style.height = H + 'px';
     Object.assign(floor.style, { fontSize: fs + 'px', lineHeight: lh + 'px', left: (W - fw) / 2 + 'px', top: (H - fh) / 2 + 'px', width: fw + 'px', height: fh + 'px' });
-    car.style.setProperty('--cw', cw + 'px');
     car.style.setProperty('--lh', lh + 'px');
     document.documentElement.style.setProperty('--fs', fs + 'px');
     draw(W, H);
   };
-  const fs = Math.min((document.documentElement.clientWidth - 48) * S / (COLS * ratio), MAX_H * S / (ROWS * 1.2));
+  const fs = Math.min((document.documentElement.clientWidth - 48) * S / FLOOR_W, MAX_H * S / (ROWS * 1.2));
   size(fs);
   const over = document.documentElement.scrollHeight - innerHeight;   // then smaller till the page fits the window's height
   if (over > 0) size(Math.max(10, fs - over * S / (ROWS * 1.2)));
@@ -105,22 +103,36 @@ addEventListener('resize', () => {
   if (innerWidth !== fitW || (matchMedia('(pointer: fine)').matches && innerHeight !== fitH)) { fitW = innerWidth; fitH = innerHeight; fit(); }
 });
 
-// Letters on the floor, each in its cell, blurring away after a while
-const at = (node, c, r) => { node.style.setProperty('--c', c); node.style.setProperty('--r', r); };
-const cells = new Map();
-function put(who, c, r, ch) {
-  const key = c + ',' + r;
+// Letters on the floor, each where it was typed, blurring away after a while
+const at = (node, x, r) => { node.style.setProperty('--x', x); node.style.setProperty('--r', r); };
+const cells = new Map(), spot = (x, r) => r + ':' + x.toFixed(2);
+const round2 = n => Math.round(n * 100) / 100;
+const pen = document.createElement('canvas').getContext('2d'), widths = new Map();
+pen.font = '100px "Times New Roman", Times, serif';
+const wide = ch => { if (!widths.has(ch)) widths.set(ch, Math.round(pen.measureText(ch).width) / 100); return widths.get(ch); };   // in ems
+function put(who, x, r, ch) {
+  const key = spot(x, r);
   cells.get(key)?.remove();
   const s = document.createElement('span');
   s.textContent = ch;
   if (who === 'them') s.className = 'them';
-  at(s, c, r);
+  at(s, x, r);
   floor.append(s);
   cells.set(key, s);
   setTimeout(() => s.classList.add('fade'), LIFE);
   setTimeout(() => { s.remove(); if (cells.get(key) === s) cells.delete(key); }, LIFE + 1600);
 }
 const caret = who => Object.assign(document.createElement('i'), { className: who === 'them' ? 'caret them' : 'caret' });
+// Something happening in the elevator: written in the middle of the floor,
+// blurring away like the letters
+function notice(...lines) {
+  const n = document.createElement('div');
+  n.className = 'notice';
+  lines.forEach((l, i) => { if (i) n.append(document.createElement('br')); n.append(l); });
+  floor.append(n);
+  setTimeout(() => n.classList.add('fade'), LIFE);
+  setTimeout(() => n.remove(), LIFE + 1600);
+}
 const restartBlink = el => { el.style.animation = 'none'; el.offsetWidth; el.style.animation = ''; };
 
 // The story line, like an adventure game's
@@ -150,45 +162,51 @@ const net = { send() {} };
 
 // You: standing in the middle to begin with, the caret blinking; tap
 // anywhere in the elevator to stand there (on the floor) and write
-const me = { c: 9, r: 7, start: 9 };
+const me = { x: 5.4, r: 7, start: 5.4 };
+let trail = [];   // where each of your letters went, for backspace
 const mine = caret('me');
 const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 function moveMine(announce = true) {   // a letter already tells them where you are
-  at(mine, me.c, me.r);
-  at(keys, me.c, me.r);
+  at(mine, me.x, me.r);
+  at(keys, me.x, me.r);
   if (!mine.isConnected) floor.append(mine);
   restartBlink(mine);
-  if (announce) net.send({ t: 'at', c: me.c, r: me.r });
+  if (announce) net.send({ t: 'at', x: me.x, r: me.r });
 }
 moveMine();
 car.addEventListener('click', e => {
   if (e.target.classList.contains('door')) return tell('The door won’t open.');
   if (e.target.classList.contains('panel')) return tell('You press the alarm. Nothing happens.');
   const b = floor.getBoundingClientRect();
-  me.c = me.start = clamp(Math.floor((e.clientX - b.left) / cw), 0, COLS - 1);
+  me.x = me.start = round2(clamp((e.clientX - b.left) / em, 0, FLOOR_W - 0.5));
   me.r = clamp(Math.floor((e.clientY - b.top) / lh), 0, ROWS - 1);
+  trail = [];
   moveMine();
   keys.focus();
 });
 function newline() {
-  if (me.start > COLS - 6) me.start = 0;
-  me.c = me.start;
+  if (me.start > FLOOR_W - 3) me.start = 0;
+  me.x = me.start;
   me.r = (me.r + 1) % ROWS;
 }
 function type(ch) {
+  trail.push({ x: me.x, r: me.r });
+  if (trail.length > 300) trail.shift();
+  if (ch === '\n' || ch === '\r') { newline(); return moveMine(); }
+  const w = wide(ch);
   let jumped = !ch.trim();
-  if (ch === '\n' || ch === '\r') newline();
-  else {
-    if (ch.trim()) { put('me', me.c, me.r, ch); net.send({ t: 'char', c: me.c, r: me.r, ch }); }
-    if (++me.c >= COLS) { newline(); jumped = true; }
-  }
+  if (me.x + w > FLOOR_W) { newline(); trail[trail.length - 1] = { x: me.x, r: me.r }; jumped = true; }
+  if (ch.trim()) { put('me', me.x, me.r, ch); net.send({ t: 'char', x: me.x, r: me.r, ch }); }
+  me.x = round2(me.x + w);
   moveMine(jumped);
 }
 function back() {
-  if (--me.c < 0) { me.c = COLS - 1; me.r = (me.r + ROWS - 1) % ROWS; }
-  const key = me.c + ',' + me.r, s = cells.get(key);
+  const p = trail.pop();
+  if (!p) return;
+  me.x = p.x; me.r = p.r;
+  const key = spot(p.x, p.r), s = cells.get(key);
   if (s && !s.classList.contains('them')) { s.remove(); cells.delete(key); }
-  net.send({ t: 'del', c: me.c, r: me.r });
+  net.send({ t: 'del', x: p.x, r: p.r });
   moveMine(false);
 }
 // The keyboard types into a textarea holding one space, so that even
@@ -204,11 +222,12 @@ keys.addEventListener('input', e => {
 });
 keys.addEventListener('compositionend', e => { for (const ch of e.data || '') type(ch); reset(); });
 keys.addEventListener('keydown', e => {
-  const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  const step = { ArrowLeft: [-.5, 0], ArrowRight: [.5, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
   if (step) {
     e.preventDefault();
-    me.c = me.start = clamp(me.c + step[0], 0, COLS - 1);
+    me.x = me.start = round2(clamp(me.x + step[0], 0, FLOOR_W - 0.5));
     me.r = clamp(me.r + step[1], 0, ROWS - 1);
+    trail = [];
     moveMine();
   }
   if (e.key === 'Escape') keys.blur();
@@ -318,7 +337,7 @@ function paired() {
   track(LOBBY, { t: since, room });   // taken: nobody else picks either of you
   tell(metBefore ? 'Someone new dropped in through the top vent.' : 'Someone got stuck in here with you.', true);
   metBefore = true;
-  shout('at', { c: me.c, r: me.r });
+  shout('at', { x: me.x, r: me.r });
 }
 function leftAlone(show) {
   if (room) wire(room, 'phx_leave', {});
@@ -328,7 +347,8 @@ function leftAlone(show) {
   if (inLobby) track(LOBBY, { t: since, room: 'resting' });
   clearTimeout(restTimer);
   restTimer = setTimeout(() => { if (inLobby && !room) track(LOBBY, { t: since, room: null }); }, REST + 50);
-  if (show) tell('They escaped through the top vent. You’re alone again.'); else status();
+  if (show) notice('They escaped through the top vent.', 'You’re alone again.');
+  status();
 }
 // Their side, checked: a letter in a cell of the floor, at most forty a second
 let heard = 0, heardAt = 0;
@@ -338,29 +358,29 @@ function fromThem(ev, d) {
   if (now - heardAt > 1000) { heardAt = now; heard = 0; }
   if (++heard > 40) return;
   if (ev === 'bye') return leftAlone(true);
-  const { c, r, ch } = d;
-  if (!Number.isInteger(c) || !Number.isInteger(r) || c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
+  const { r, ch } = d, x = round2(d.x);
+  if (!Number.isFinite(x) || !Number.isInteger(r) || x < 0 || x > FLOOR_W || r < 0 || r >= ROWS) return;
   if (ev === 'char') {
     if (typeof ch !== 'string' || [...ch].length !== 1 || /[\u0000-\u001f\u007f-\u009f]/.test(ch)) return;
-    put('them', c, r, ch);
-    at(theirs, Math.min(c + 1, COLS - 1), r);
+    put('them', x, r, ch);
+    at(theirs, Math.min(round2(x + wide(ch)), FLOOR_W), r);
   } else if (ev === 'del') {
-    const key = c + ',' + r, s = cells.get(key);
+    const key = spot(x, r), s = cells.get(key);
     if (s && s.classList.contains('them')) { s.remove(); cells.delete(key); }
-    at(theirs, c, r);
-  } else if (ev === 'at') at(theirs, c, r);
+    at(theirs, x, r);
+  } else if (ev === 'at') at(theirs, x, r);
   else return;
   if (!theirs.isConnected) floor.append(theirs);
   restartBlink(theirs);
 }
 // Your side: at most twenty a second, which keeps the line (and the bill) small
 let sent = 0, sentAt = 0;
-net.send = ({ t, c, r, ch }) => {
+net.send = ({ t, x, r, ch }) => {
   if (!partner) return;
   const now = Date.now();
   if (now - sentAt > 1000) { sentAt = now; sent = 0; }
   if (++sent > 20) return;
-  shout(t, ch ? { c, r, ch } : { c, r });
+  shout(t, ch ? { x, r, ch } : { x, r });
 };
 addEventListener('pagehide', () => {
   if (partner) shout('bye');

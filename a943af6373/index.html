@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Stuck elevator</title>
+<style>
+  /* 1990s HTML: Times on white, the first browsers' colours (link blue, red),
+     the elevator in Courier. Nothing is stored and nothing is loaded from
+     anywhere else: you're here while the page is open, then you're gone. */
+  html { color-scheme: light; -webkit-text-size-adjust: 100%; }
+  body { margin: 8px; background: #fff; color: #000; font-family: "Times New Roman", Times, serif;
+         cursor: text; touch-action: manipulation; }
+  a { color: #0000EE; cursor: pointer; }
+  a:active { color: #FF0000; }
+  .count { color: #FF0000; font-family: "Courier New", Courier, monospace; font-weight: bold; }
+  .spin { font-family: "Courier New", Courier, monospace; }
+  .flash { animation: blink 0.5s steps(1) 6; }
+  /* the elevator, seen from above: a grid of letters 38 wide and 16 deep */
+  .car { position: relative; width: max-content; font-family: "Courier New", Courier, monospace;
+         -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  .car pre { margin: 0; font: inherit; }
+  .door, .panel { cursor: pointer; }
+  .ink > * { position: absolute; left: calc(var(--c) * var(--cw)); top: calc(var(--r) * var(--lh)); }
+  .ink span { white-space: pre; transition: filter 1.5s, opacity 1.5s; }
+  .ink span.fade { filter: blur(5px); opacity: 0; }
+  .ink .them { color: #0000EE; }
+  .caret { width: 0; height: var(--lh); border-left: 2px solid #000; animation: blink 1.06s steps(1) infinite; }
+  .caret.them { border-color: #0000EE; }
+  @keyframes blink { 50% { visibility: hidden; } }
+  /* what the keyboard types into: invisible, standing where you write */
+  .keys { position: absolute; left: calc(var(--c) * var(--cw)); top: calc(var(--r) * var(--lh));
+          width: 1px; height: 1px; margin: 0; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden;
+          font-size: 16px; color: transparent; background: transparent; caret-color: transparent; }
+</style>
+</head>
+<body>
+<h1>Stuck elevator</h1>
+<p>People stuck in elevators right now: <span class="count">0001</span></p>
+<hr>
+<p>You are stuck in an elevator.<br><span class="say"></span></p>
+<div class="car"><pre aria-hidden="true"></pre><div class="ink"></div><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div>
+<div class="foot">
+<p>Tap anywhere inside and write. Every letter fades.</p>
+<p>[ <a href="#" class="music">music: on</a> | <a href="#" class="test">let someone in (test)</a> ]</p>
+</div>
+<script>
+const COLS = 38, ROWS = 16;   // inside the walls, in letters
+const LIFE = 3500;            // ms a letter stays before it blurs away (1.5 s more)
+const $ = s => document.querySelector(s);
+const car = $('.car'), walls = $('.car pre'), ink = $('.ink'), keys = $('.keys'), say = $('.say');
+
+// The walls, the door with the buttons beside it, and the word "door" under it
+walls.innerHTML = [
+  '+' + '-'.repeat(COLS) + '+',
+  ...Array(ROWS).fill('|' + ' '.repeat(COLS) + '|'),
+  '+' + '-'.repeat(12) + '<span class="door" title="door">======||======</span>--<span class="panel" title="buttons">[::]</span>' + '-'.repeat(6) + '+',
+  ' '.repeat(18) + 'door',
+].join('\n');
+
+// As big as fits: 40 letters across, and the whole page in the window's height
+let cw, lh;
+function fit() {
+  const size = fs => {
+    lh = fs * 1.2;
+    car.style.fontSize = fs + 'px';
+    car.style.lineHeight = lh + 'px';
+    cw = walls.getBoundingClientRect().width / 40;
+    car.style.setProperty('--cw', cw + 'px');
+    car.style.setProperty('--lh', lh + 'px');
+  };
+  size(100);
+  const fs = Math.min(28, (document.documentElement.clientWidth - 16) / (40 * cw / 100));
+  size(fs);
+  const over = document.documentElement.scrollHeight - innerHeight;   // then smaller till the page fits the window's height
+  if (over > 0) size(Math.max(11, fs - over / ((ROWS + 3) * 1.2)));
+}
+fit();
+addEventListener('load', fit);   // again once everything has its final size
+let fitW = innerWidth, fitH = innerHeight;
+addEventListener('resize', () => {
+  if (innerWidth !== fitW || (matchMedia('(pointer: fine)').matches && innerHeight !== fitH)) { fitW = innerWidth; fitH = innerHeight; fit(); }
+});
+
+// Where things stand: a letter cell, the wall's line and column added
+const at = (node, c, r) => { node.style.setProperty('--c', c + 1); node.style.setProperty('--r', r + 1); };
+const cells = new Map();
+function put(who, c, r, ch) {
+  const key = c + ',' + r;
+  cells.get(key)?.remove();
+  const s = document.createElement('span');
+  s.textContent = ch;
+  if (who === 'them') s.className = 'them';
+  at(s, c, r);
+  ink.append(s);
+  cells.set(key, s);
+  setTimeout(() => s.classList.add('fade'), LIFE);
+  setTimeout(() => { s.remove(); if (cells.get(key) === s) cells.delete(key); }, LIFE + 1600);
+}
+const caret = who => Object.assign(document.createElement('i'), { className: who === 'them' ? 'caret them' : 'caret' });
+const restartBlink = el => { el.style.animation = 'none'; el.offsetWidth; el.style.animation = ''; };
+
+// The story line, like an adventure game's
+let together = false, sayTimer;
+const spin = Object.assign(document.createElement('span'), { className: 'spin' });
+let spinFrame = 0;
+setInterval(() => { spin.textContent = '|/-\\'[spinFrame++ % 4]; }, 150);
+function status() {
+  say.className = 'say';
+  if (together) say.textContent = 'Someone is stuck in here with you.';
+  else { say.textContent = 'You are alone. Waiting for someone '; say.append(spin); }
+}
+function tell(text, flash) {
+  clearTimeout(sayTimer);
+  say.className = 'say';
+  say.textContent = text;
+  if (flash) { say.offsetWidth; say.className = 'say flash'; }
+  sayTimer = setTimeout(status, 3500);
+}
+status();
+const setCount = n => { $('.count').textContent = String(n).padStart(4, '0'); };
+
+// The other side. For now a stand-in (below); real people come with the
+// multiplayer step, sending the same three things: where you stand, a
+// letter, a letter taken back.
+const net = { send() {} };
+
+// You: tap anywhere inside to stand there and write
+let me = null;               // { c, r, start }: where your next letter goes
+const mine = caret('me');
+function moveMine() {
+  at(mine, me.c, me.r);
+  at(keys, me.c, me.r);
+  if (!mine.isConnected) ink.append(mine);
+  restartBlink(mine);
+  net.send({ t: 'at', c: me.c, r: me.r });
+}
+car.addEventListener('click', e => {
+  if (e.target.closest('.door')) return tell('The door won’t open.');
+  if (e.target.closest('.panel')) return tell('You press the alarm button. Nothing happens.');
+  const box = car.getBoundingClientRect();
+  const c = Math.floor((e.clientX - box.left) / cw) - 1, r = Math.floor((e.clientY - box.top) / lh) - 1;
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
+  me = { c, r, start: c };
+  moveMine();
+  keys.focus();
+});
+function newline() {
+  if (me.start > COLS - 6) me.start = 0;
+  me.c = me.start;
+  me.r = (me.r + 1) % ROWS;
+}
+function type(ch) {
+  if (!me) return;
+  if (ch === '\n' || ch === '\r') newline();
+  else {
+    if (ch.trim()) { put('me', me.c, me.r, ch); net.send({ t: 'char', c: me.c, r: me.r, ch }); }
+    if (++me.c >= COLS) newline();
+  }
+  moveMine();
+}
+function back() {
+  if (!me) return;
+  if (--me.c < 0) { me.c = COLS - 1; me.r = (me.r + ROWS - 1) % ROWS; }
+  const key = me.c + ',' + me.r, s = cells.get(key);
+  if (s && !s.classList.contains('them')) { s.remove(); cells.delete(key); net.send({ t: 'del', c: me.c, r: me.r }); }
+  moveMine();
+}
+// The keyboard types into a textarea holding one space, so that even
+// backspace makes an input event; every keystroke is read and the space put back
+const reset = () => { keys.value = ' '; keys.setSelectionRange(1, 1); };
+reset();
+keys.addEventListener('focus', reset);
+keys.addEventListener('input', e => {
+  if (e.isComposing) return;
+  if (e.inputType?.startsWith('delete')) back();
+  else for (const ch of (e.data ?? keys.value.slice(1))) type(ch);
+  reset();
+});
+keys.addEventListener('compositionend', e => { for (const ch of e.data || '') type(ch); reset(); });
+keys.addEventListener('keydown', e => {
+  const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (step && me) {
+    e.preventDefault();
+    me.c = Math.min(COLS - 1, Math.max(0, me.c + step[0]));
+    me.r = Math.min(ROWS - 1, Math.max(0, me.r + step[1]));
+    me.start = me.c;
+    moveMine();
+  }
+  if (e.key === 'Escape') keys.blur();
+});
+
+// A stand-in for trying the page alone (test): someone gets in, writes a
+// little here and there, sometimes stepping closer to you, then gets out
+const lines = ['hello?', 'is anyone there', 'oh hi', 'we are stuck', 'how long have you been in here',
+               'i can see you writing', 'this music though', 'i was going to floor 7', 'hi'];
+const theirs = caret('them');
+const testLink = $('.test');
+let guest = null;
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const wait = ms => new Promise(go => setTimeout(go, ms));
+async function letIn() {
+  const g = guest = { c: rnd(0, COLS - 14), r: rnd(0, ROWS - 1) };
+  together = true; setCount(2);
+  tell('Someone got stuck in here with you.', true);
+  testLink.textContent = 'let them out (test)';
+  at(theirs, g.c, g.r); ink.append(theirs);
+  const until = Date.now() + rnd(60000, 90000);
+  await wait(2500);
+  while (guest === g && Date.now() < until) {
+    let c = g.c, r = g.r;
+    for (const ch of lines[rnd(0, lines.length - 1)]) {
+      await wait(rnd(70, 200));
+      if (guest !== g) return;
+      if (ch !== ' ') put('them', c, r, ch);
+      if (++c >= COLS) { c = g.c; r = (r + 1) % ROWS; }
+      at(theirs, c, r);
+    }
+    await wait(rnd(2500, 6000));
+    if (guest !== g) return;
+    if (me && Math.random() < 0.5) { g.c = Math.max(0, Math.min(COLS - 14, me.start + rnd(-6, 6))); g.r = Math.max(0, Math.min(ROWS - 1, me.r + rnd(-3, 3))); }
+    else { g.c = rnd(0, COLS - 14); g.r = rnd(0, ROWS - 1); }
+    at(theirs, g.c, g.r); restartBlink(theirs);
+  }
+  if (guest === g) letOut();
+}
+function letOut() {
+  guest = null; together = false; setCount(1);
+  theirs.remove();
+  tell('The other person got out. You are alone again.');
+  testLink.textContent = 'let someone in (test)';
+}
+testLink.addEventListener('click', e => { e.preventDefault(); guest ? letOut() : letIn(); });
+
+// Elevator music: an original little bossa nova, made up here and played by
+// the page itself through a small ceiling speaker (no deep bass, no air),
+// very quiet. Browsers only allow sound after a tap, so it starts on your first.
+function makeBand(ctx, dest) {
+  const beat = 60 / 88, hz = m => 440 * 2 ** ((m - 69) / 12);
+  const bus = ctx.createGain(), hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), room = ctx.createConvolver(), wet = ctx.createGain();
+  hp.type = 'highpass'; hp.frequency.value = 120;
+  lp.type = 'lowpass'; lp.frequency.value = 3000;
+  const len = ctx.sampleRate * 1.5 | 0, ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 4; }
+  room.buffer = ir; wet.gain.value = 0.18;
+  bus.connect(hp); bus.connect(room).connect(wet).connect(hp); hp.connect(lp).connect(dest);
+  const noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), nd = noise.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+  const env = (g, t, peak, decay, end) => {
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.008);
+    g.gain.setTargetAtTime(peak * 0.3, t + 0.008, decay); g.gain.setTargetAtTime(0, end, 0.1);
+  };
+  function piano(t, m, d, vel) {   // a soft electric piano: one sine bending another
+    const f = hz(m), o = ctx.createOscillator(), mod = ctx.createOscillator(), depth = ctx.createGain(), g = ctx.createGain();
+    o.frequency.value = f; mod.frequency.value = f;
+    depth.gain.setValueAtTime(f * 1.1, t); depth.gain.setTargetAtTime(f * 0.1, t, 0.15);
+    mod.connect(depth).connect(o.frequency); o.connect(g).connect(bus);
+    env(g, t, vel, 0.35, t + d);
+    o.start(t); mod.start(t); o.stop(t + d + 1); mod.stop(t + d + 1);
+  }
+  function bass(t, m, d) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle'; o.frequency.value = hz(m); o.connect(g).connect(bus);
+    env(g, t, 0.2, 0.4, t + d);
+    o.start(t); o.stop(t + d + 1);
+  }
+  function vibes(t, m, d) {        // a vibraphone: a sine, its bright fourth partial, a slow wobble
+    const f = hz(m), o = ctx.createOscillator(), o4 = ctx.createOscillator(), g = ctx.createGain(), g4 = ctx.createGain();
+    const wob = ctx.createOscillator(), wd = ctx.createGain(), amp = ctx.createGain();
+    o.frequency.value = f; o4.frequency.value = f * 4; wob.frequency.value = 5.5; wd.gain.value = 0.2; amp.gain.value = 0.8;
+    o.connect(g); o4.connect(g4).connect(g); g.connect(amp).connect(bus); wob.connect(wd).connect(amp.gain);
+    g4.gain.setValueAtTime(0.25, t); g4.gain.setTargetAtTime(0, t, 0.06);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.09, t + 0.004);
+    g.gain.setTargetAtTime(0, t + 0.004, 0.8); g.gain.setTargetAtTime(0, t + d, 0.15);
+    for (const x of [o, o4, wob]) { x.start(t); x.stop(t + d + 1.5); }
+  }
+  function brush(t, vel, d) {
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noise; f.type = 'bandpass'; f.frequency.value = 2400; f.Q.value = 0.7;
+    s.connect(f).connect(g).connect(bus);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.004); g.gain.setTargetAtTime(0, t + 0.004, d);
+    s.start(t, Math.random() * 0.5); s.stop(t + 0.5);
+  }
+
+  // Eight bars in F, round and round: chords (beat, beats, notes, bass root) and a tune
+  const F = [57, 60, 64, 67], Em = [55, 59, 62, 64], A7 = [55, 61, 64, 69], Dm = [53, 57, 60, 64],
+        G = [53, 59, 64], Gm = [58, 62, 65, 69], C = [58, 62, 64, 69], C7 = [58, 61, 64, 67];
+  const chords = [[0, 4, F, 41], [4, 2, Em, 40], [6, 2, A7, 45], [8, 4, Dm, 38], [12, 4, G, 43],
+                  [16, 4, Gm, 43], [20, 4, C, 36], [24, 2, F, 41], [26, 2, Dm, 38], [28, 2, Gm, 43], [30, 2, C7, 36]];
+  const tune = [[0, 72, 1.5], [1.5, 69, .5], [2, 76, 2], [4, 74, 1], [5, 71, 1], [6, 73, 2],
+                [8, 76, 1.5], [9.5, 74, .5], [10, 72, 1], [11, 69, 1], [12, 71, 3],
+                [16, 70, 1.5], [17.5, 74, .5], [18, 77, 2], [20, 76, 1], [21, 74, 1], [22, 69, 2],
+                [24, 72, 1.5], [25.5, 76, .5], [26, 74, 2], [28, 70, 2], [30, 67, 2]];
+  const events = [], chordAt = b => chords.findLast(c => c[0] <= b);
+  for (const [b, n, , root] of chords) {
+    const steps = n === 4 ? [[0, root, 1.4], [1.5, root + 7, .4], [2, root + 7, 1.4], [3.5, root, .4]] : [[0, root, 1.4], [1.5, root + 7, .4]];
+    for (const [d, m, l] of steps) events.push([b + d, t => bass(t, m, l * beat)]);
+  }
+  for (const block of [0, 8, 16, 24]) for (const [d, l] of [[0, .45], [1.5, .45], [3, 1.2], [5, .45], [6.5, 1.2]]) {
+    const notes = chordAt(block + d)[2];
+    events.push([block + d, t => notes.forEach((m, i) => piano(t + i * 0.012, m, l * beat, 0.035))]);
+  }
+  for (const [b, m, l] of tune) events.push([b, (t, loop) => loop % 2 === 0 && vibes(t, m, l * beat)]);   // every other time round
+  for (let b = 0; b < 32; b += 0.5) { const off = b % 1 > 0; events.push([b, t => brush(t, off ? 0.012 : 0.007, off ? 0.07 : 0.03)]); }
+  events.sort((a, b) => a[0] - b[0]);
+  return { beat, beats: 32, events };
+}
+const VOL = 0.25;
+let audio = null, out, band, next = 0, round = 0, t0 = 0, musicOn = true;
+function tick() {
+  if (audio?.state !== 'running') return;
+  for (;;) {
+    const [b, play] = band.events[next], t = t0 + b * band.beat;
+    if (t > audio.currentTime + 0.3) break;
+    if (t >= audio.currentTime - 0.05) play(t, round);
+    if (++next === band.events.length) { next = 0; round++; t0 += band.beats * band.beat; }
+  }
+}
+function fadeTo(v, s) { const now = audio.currentTime; out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(out.gain.value, now); out.gain.linearRampToValueAtTime(v, now + s); }
+function music(on) {
+  if (on) {
+    if (!audio) {
+      audio = new (window.AudioContext || window.webkitAudioContext)();
+      out = audio.createGain(); out.gain.value = 0; out.connect(audio.destination);
+      band = makeBand(audio, out);
+      t0 = audio.currentTime + 0.1;
+      setInterval(tick, 50);
+    }
+    audio.resume();
+    fadeTo(VOL, 4);
+  } else if (audio) {
+    fadeTo(0, 0.4);
+    setTimeout(() => { if (!musicOn) audio.suspend(); }, 450);
+  }
+}
+const musicLink = $('.music');
+musicLink.addEventListener('click', e => {
+  e.preventDefault();
+  musicOn = !musicOn;
+  musicLink.textContent = musicOn ? 'music: on' : 'music: off';
+  music(musicOn);
+});
+const firstTap = () => { if (musicOn && !audio) music(true); };
+document.addEventListener('click', firstTap);
+document.addEventListener('keydown', firstTap);
+document.addEventListener('visibilitychange', () => {
+  if (!audio) return;
+  if (document.hidden) audio.suspend();
+  else if (musicOn) audio.resume();
+});
+</script>
+</body>
+</html>

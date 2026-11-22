@@ -14,7 +14,8 @@
          text-align: center; cursor: text; touch-action: manipulation;
          display: flex; flex-direction: column; justify-content: center;   /* everything in the middle of the window */
          min-height: calc(100vh - 16px); min-height: calc(100dvh - 16px); }
-  p { margin: 12px 0; }
+  p { margin: 0; }
+  .say { margin-bottom: 14px; }
   a { color: #0000EE; cursor: pointer; }
   a:active { color: #FF0000; }
   small { font-size: 13px; }
@@ -24,7 +25,7 @@
   @keyframes blink { 50% { visibility: hidden; } }
   /* the elevator seen from above: the floor in the middle, the four walls
      going out to their tops, drawn in plain lines */
-  .car { position: relative; margin: 0 auto; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  .car { position: relative; margin: 40px auto; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   .car svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
   .car path { fill: none; stroke: #000; stroke-width: 1px; stroke-linejoin: round; }
   .car path.hit { fill: transparent; stroke: none; pointer-events: all; cursor: pointer; }
@@ -42,13 +43,14 @@
 </style>
 </head>
 <body>
-<p><span class="count">0001</span> people stuck right now</p>
+<p><span class="count">0001</span> <span class="who">person is</span> stuck in an elevator right now</p>
 <div class="car"><svg aria-hidden="true"></svg><div class="floor"><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div></div>
 <p class="say"></p>
 <p><small><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="test">let someone in (test)</a></small></p>
 <script>
 const COLS = 26, ROWS = 16;   // the floor, in letters
 const S = 0.62;               // the floor's size against the walls' tops: how far down you look
+const MAX_H = 460;            // px: the elevator's tallest, so it stays small on a big screen
 const LIFE = 3500;            // ms a letter stays before it blurs away (1.5 s more)
 const $ = s => document.querySelector(s);
 const car = $('.car'), svg = $('.car svg'), floor = $('.floor'), keys = $('.keys'), say = $('.say');
@@ -70,7 +72,8 @@ function draw(W, H) {
     + `<path class="hit panel" d="${onFront(.21, .34, .15, .95)}"/>`;
 }
 
-// As big as fits: the window's width, and the whole page in its height
+// As big as fits, with room at the sides, never taller than MAX_H, and the
+// whole page in the window's height
 let cw, lh;
 function fit() {
   const probe = Object.assign(document.createElement('span'), { textContent: 'M'.repeat(10) });
@@ -86,7 +89,7 @@ function fit() {
     car.style.setProperty('--lh', lh + 'px');
     draw(W, H);
   };
-  const fs = Math.min(26, (document.documentElement.clientWidth - 16) * S / (COLS * ratio));
+  const fs = Math.min((document.documentElement.clientWidth - 48) * S / (COLS * ratio), MAX_H * S / (ROWS * 1.2));
   size(fs);
   const over = document.documentElement.scrollHeight - innerHeight;   // then smaller till the page fits the window's height
   if (over > 0) size(Math.max(10, fs - over * S / (ROWS * 1.2)));
@@ -124,7 +127,7 @@ setInterval(() => { spin.textContent = '|/-\\'[spinFrame++ % 4]; }, 150);
 function status() {
   say.className = 'say';
   if (together) say.textContent = 'Someone is stuck in here with you.';
-  else { say.textContent = 'You are alone. Waiting for someone '; say.append(spin); }
+  else { say.textContent = 'You are alone. Waiting for someone to be stuck with '; say.append(spin); }
 }
 function tell(text, flash) {
   clearTimeout(sayTimer);
@@ -134,7 +137,7 @@ function tell(text, flash) {
   sayTimer = setTimeout(status, 3500);
 }
 status();
-const setCount = n => { $('.count').textContent = String(n).padStart(4, '0'); };
+const setCount = n => { $('.count').textContent = String(n).padStart(4, '0'); $('.who').textContent = n === 1 ? 'person is' : 'people are'; };
 
 // The other side. For now a stand-in (below); real people come with the
 // multiplayer step, sending the same three things: where you stand, a

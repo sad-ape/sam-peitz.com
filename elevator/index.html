@@ -11,6 +11,7 @@
      else: you're here while the page is open, then you're gone. */
   html { color-scheme: light; -webkit-text-size-adjust: 100%; }
   body { margin: 8px; background: #fff; color: #000; font-family: "Times New Roman", Times, serif;
+         font-size: var(--fs, 16px);   /* every word on the page the size of the letters on the floor */
          text-align: center; cursor: text; touch-action: manipulation;
          display: flex; flex-direction: column; justify-content: center;   /* everything in the middle of the window */
          min-height: calc(100vh - 16px); min-height: calc(100dvh - 16px); }
@@ -18,9 +19,8 @@
   .say { margin-bottom: 14px; }
   a { color: #0000EE; cursor: pointer; }
   a:active { color: #FF0000; }
-  small { font-size: 13px; }
   .about { max-width: 21em; margin: 12px auto 0; }
-  .count { color: #FF0000; font-weight: bold; }
+  .count { color: #FF0000; }
   .spin { font-family: "Courier New", Courier, monospace; }
   .flash { animation: blink 0.5s steps(1) 6; }
   @keyframes blink { 50% { visibility: hidden; } }
@@ -47,8 +47,8 @@
 <p><span class="count">0001</span> <span class="who">person is</span> stuck in an elevator right now</p>
 <div class="car"><svg aria-hidden="true"></svg><div class="floor"><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div></div>
 <p class="say"></p>
-<p><small><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="test">let someone in (test)</a> &nbsp; <a href="#" class="what" aria-label="What is this?">?</a></small></p>
-<p class="about" hidden><small>Two random people, caught in a digital elevator until one of them leaves. Tap the floor to write. Every letter fades away, and nothing is saved.<span class="total" hidden><br><br><b class="sofar"></b> people have been stuck in here so far.</span></small></p>
+<p><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="test">let someone in (test)</a> &nbsp; <a href="#" class="what" aria-label="What is this?">?</a></p>
+<p class="about" hidden>A little digital experiment by <a href="https://x.com/samdape" target="_blank" rel="noopener">Sam</a>. Two strangers, stuck in an elevator until one of them leaves. Tap the floor to write. Nothing you write is stored: every letter fades, and when you leave, you’re gone.<span class="total" hidden><br><br><span class="sofar"></span> people have been stuck in here so far.</span></p>
 <script>
 const COLS = 26, ROWS = 16;   // the floor, in letters
 const S = 0.62;               // the floor's size against the walls' tops: how far down you look
@@ -89,6 +89,7 @@ function fit() {
     Object.assign(floor.style, { fontSize: fs + 'px', lineHeight: lh + 'px', left: (W - fw) / 2 + 'px', top: (H - fh) / 2 + 'px', width: fw + 'px', height: fh + 'px' });
     car.style.setProperty('--cw', cw + 'px');
     car.style.setProperty('--lh', lh + 'px');
+    document.documentElement.style.setProperty('--fs', fs + 'px');
     draw(W, H);
   };
   const fs = Math.min((document.documentElement.clientWidth - 48) * S / (COLS * ratio), MAX_H * S / (ROWS * 1.2));

@@ -7,74 +7,89 @@
 <title>Stuck elevator</title>
 <style>
   /* 1990s HTML: Times on white, the first browsers' colours (link blue, red),
-     the elevator in Courier. Nothing is stored and nothing is loaded from
-     anywhere else: you're here while the page is open, then you're gone. */
+     letters in Courier. Nothing is stored and nothing is loaded from anywhere
+     else: you're here while the page is open, then you're gone. */
   html { color-scheme: light; -webkit-text-size-adjust: 100%; }
   body { margin: 8px; background: #fff; color: #000; font-family: "Times New Roman", Times, serif;
-         cursor: text; touch-action: manipulation; }
+         text-align: center; cursor: text; touch-action: manipulation;
+         display: flex; flex-direction: column; justify-content: center;   /* everything in the middle of the window */
+         min-height: calc(100vh - 16px); min-height: calc(100dvh - 16px); }
+  p { margin: 12px 0; }
   a { color: #0000EE; cursor: pointer; }
   a:active { color: #FF0000; }
+  small { font-size: 13px; }
   .count { color: #FF0000; font-family: "Courier New", Courier, monospace; font-weight: bold; }
   .spin { font-family: "Courier New", Courier, monospace; }
   .flash { animation: blink 0.5s steps(1) 6; }
-  /* the elevator, seen from above: a grid of letters 38 wide and 16 deep */
-  .car { position: relative; width: max-content; font-family: "Courier New", Courier, monospace;
-         -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-  .car pre { margin: 0; font: inherit; }
-  .door, .panel { cursor: pointer; }
-  .ink > * { position: absolute; left: calc(var(--c) * var(--cw)); top: calc(var(--r) * var(--lh)); }
-  .ink span { white-space: pre; transition: filter 1.5s, opacity 1.5s; }
-  .ink span.fade { filter: blur(5px); opacity: 0; }
-  .ink .them { color: #0000EE; }
+  @keyframes blink { 50% { visibility: hidden; } }
+  /* the elevator seen from above: the floor in the middle, the four walls
+     going out to their tops, drawn in plain lines */
+  .car { position: relative; margin: 0 auto; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  .car svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .car path { fill: none; stroke: #000; stroke-width: 1px; stroke-linejoin: round; }
+  .car path.hit { fill: transparent; stroke: none; pointer-events: all; cursor: pointer; }
+  /* the floor, where you stand and write: a grid of letters */
+  .floor { position: absolute; font-family: "Courier New", Courier, monospace; text-align: left; }
+  .floor > * { position: absolute; left: calc(var(--c) * var(--cw)); top: calc(var(--r) * var(--lh)); }
+  .floor span { white-space: pre; transition: filter 1.5s, opacity 1.5s; }
+  .floor span.fade { filter: blur(5px); opacity: 0; }
+  .floor .them { color: #0000EE; }
   .caret { width: 0; height: var(--lh); border-left: 2px solid #000; animation: blink 1.06s steps(1) infinite; }
   .caret.them { border-color: #0000EE; }
-  @keyframes blink { 50% { visibility: hidden; } }
   /* what the keyboard types into: invisible, standing where you write */
-  .keys { position: absolute; left: calc(var(--c) * var(--cw)); top: calc(var(--r) * var(--lh));
-          width: 1px; height: 1px; margin: 0; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden;
+  .keys { width: 1px; height: 1px; margin: 0; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden;
           font-size: 16px; color: transparent; background: transparent; caret-color: transparent; }
 </style>
 </head>
 <body>
-<h1>Stuck elevator</h1>
-<p>People stuck in elevators right now: <span class="count">0001</span></p>
-<hr>
-<p>You are stuck in an elevator.<br><span class="say"></span></p>
-<div class="car"><pre aria-hidden="true"></pre><div class="ink"></div><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div>
-<div class="foot">
-<p>Tap anywhere inside and write. Every letter fades.</p>
-<p>[ <a href="#" class="music">music: on</a> | <a href="#" class="test">let someone in (test)</a> ]</p>
-</div>
+<p><span class="count">0001</span> people stuck right now</p>
+<div class="car"><svg aria-hidden="true"></svg><div class="floor"><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div></div>
+<p class="say"></p>
+<p><small><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="test">let someone in (test)</a></small></p>
 <script>
-const COLS = 38, ROWS = 16;   // inside the walls, in letters
+const COLS = 26, ROWS = 16;   // the floor, in letters
+const S = 0.62;               // the floor's size against the walls' tops: how far down you look
 const LIFE = 3500;            // ms a letter stays before it blurs away (1.5 s more)
 const $ = s => document.querySelector(s);
-const car = $('.car'), walls = $('.car pre'), ink = $('.ink'), keys = $('.keys'), say = $('.say');
+const car = $('.car'), svg = $('.car svg'), floor = $('.floor'), keys = $('.keys'), say = $('.say');
 
-// The walls, the door with the buttons beside it, and the word "door" under it
-walls.innerHTML = [
-  '+' + '-'.repeat(COLS) + '+',
-  ...Array(ROWS).fill('|' + ' '.repeat(COLS) + '|'),
-  '+' + '-'.repeat(12) + '<span class="door" title="door">======||======</span>--<span class="panel" title="buttons">[::]</span>' + '-'.repeat(6) + '+',
-  ' '.repeat(18) + 'door',
-].join('\n');
+// The lines, in perspective: the walls' tops round the outside, the floor in
+// the middle, the corners joining them, and on the front wall the door (two
+// halves) with the buttons beside it. x and y are fractions of the width and
+// height across the walls' tops; v is the height up a wall (0 floor, 1 top).
+function draw(W, H) {
+  const k = v => 1 / (1 / S - v * (1 / S - 1));
+  const pt = (x, y, v) => (W / 2 + x * (W - 1) * k(v)).toFixed(1) + ' ' + (H / 2 + y * (H - 1) * k(v)).toFixed(1);
+  const ring = v => `M${pt(-.5, -.5, v)}L${pt(.5, -.5, v)}L${pt(.5, .5, v)}L${pt(-.5, .5, v)}Z`;
+  const corner = (x, y) => `M${pt(x, y, 0)}L${pt(x, y, 1)}`;
+  const onFront = (x0, x1, v0, v1) => `M${pt(x0, .5, v0)}L${pt(x1, .5, v0)}L${pt(x1, .5, v1)}L${pt(x0, .5, v1)}Z`;
+  svg.innerHTML = `<path d="${ring(1)}${ring(0)}${corner(-.5, -.5)}${corner(.5, -.5)}${corner(.5, .5)}${corner(-.5, .5)}"/>`
+    + `<path d="${onFront(-.17, .17, 0, .85)}M${pt(0, .5, 0)}L${pt(0, .5, .85)}"/>`
+    + `<path d="${onFront(.25, .3, .4, .62)}"/>`
+    + `<path class="hit door" d="${onFront(-.17, .17, 0, .85)}"/>`
+    + `<path class="hit panel" d="${onFront(.21, .34, .15, .95)}"/>`;
+}
 
-// As big as fits: 40 letters across, and the whole page in the window's height
+// As big as fits: the window's width, and the whole page in its height
 let cw, lh;
 function fit() {
+  const probe = Object.assign(document.createElement('span'), { textContent: 'M'.repeat(10) });
+  floor.style.fontSize = '100px'; floor.append(probe);
+  const ratio = probe.getBoundingClientRect().width / 1000;
+  probe.remove();
   const size = fs => {
-    lh = fs * 1.2;
-    car.style.fontSize = fs + 'px';
-    car.style.lineHeight = lh + 'px';
-    cw = walls.getBoundingClientRect().width / 40;
+    cw = fs * ratio; lh = fs * 1.2;
+    const fw = COLS * cw, fh = ROWS * lh, W = fw / S, H = fh / S;
+    car.style.width = W + 'px'; car.style.height = H + 'px';
+    Object.assign(floor.style, { fontSize: fs + 'px', lineHeight: lh + 'px', left: (W - fw) / 2 + 'px', top: (H - fh) / 2 + 'px', width: fw + 'px', height: fh + 'px' });
     car.style.setProperty('--cw', cw + 'px');
     car.style.setProperty('--lh', lh + 'px');
+    draw(W, H);
   };
-  size(100);
-  const fs = Math.min(28, (document.documentElement.clientWidth - 16) / (40 * cw / 100));
+  const fs = Math.min(26, (document.documentElement.clientWidth - 16) * S / (COLS * ratio));
   size(fs);
   const over = document.documentElement.scrollHeight - innerHeight;   // then smaller till the page fits the window's height
-  if (over > 0) size(Math.max(11, fs - over / ((ROWS + 3) * 1.2)));
+  if (over > 0) size(Math.max(10, fs - over * S / (ROWS * 1.2)));
 }
 fit();
 addEventListener('load', fit);   // again once everything has its final size
@@ -83,8 +98,8 @@ addEventListener('resize', () => {
   if (innerWidth !== fitW || (matchMedia('(pointer: fine)').matches && innerHeight !== fitH)) { fitW = innerWidth; fitH = innerHeight; fit(); }
 });
 
-// Where things stand: a letter cell, the wall's line and column added
-const at = (node, c, r) => { node.style.setProperty('--c', c + 1); node.style.setProperty('--r', r + 1); };
+// Letters on the floor, each in its cell, blurring away after a while
+const at = (node, c, r) => { node.style.setProperty('--c', c); node.style.setProperty('--r', r); };
 const cells = new Map();
 function put(who, c, r, ch) {
   const key = c + ',' + r;
@@ -93,7 +108,7 @@ function put(who, c, r, ch) {
   s.textContent = ch;
   if (who === 'them') s.className = 'them';
   at(s, c, r);
-  ink.append(s);
+  floor.append(s);
   cells.set(key, s);
   setTimeout(() => s.classList.add('fade'), LIFE);
   setTimeout(() => { s.remove(); if (cells.get(key) === s) cells.delete(key); }, LIFE + 1600);
@@ -126,23 +141,25 @@ const setCount = n => { $('.count').textContent = String(n).padStart(4, '0'); };
 // letter, a letter taken back.
 const net = { send() {} };
 
-// You: tap anywhere inside to stand there and write
-let me = null;               // { c, r, start }: where your next letter goes
+// You: standing in the middle to begin with, the caret blinking; tap
+// anywhere in the elevator to stand there (on the floor) and write
+const me = { c: 9, r: 7, start: 9 };
 const mine = caret('me');
+const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 function moveMine() {
   at(mine, me.c, me.r);
   at(keys, me.c, me.r);
-  if (!mine.isConnected) ink.append(mine);
+  if (!mine.isConnected) floor.append(mine);
   restartBlink(mine);
   net.send({ t: 'at', c: me.c, r: me.r });
 }
+moveMine();
 car.addEventListener('click', e => {
-  if (e.target.closest('.door')) return tell('The door won’t open.');
-  if (e.target.closest('.panel')) return tell('You press the alarm button. Nothing happens.');
-  const box = car.getBoundingClientRect();
-  const c = Math.floor((e.clientX - box.left) / cw) - 1, r = Math.floor((e.clientY - box.top) / lh) - 1;
-  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
-  me = { c, r, start: c };
+  if (e.target.classList.contains('door')) return tell('The door won’t open.');
+  if (e.target.classList.contains('panel')) return tell('You press the alarm. Nothing happens.');
+  const b = floor.getBoundingClientRect();
+  me.c = me.start = clamp(Math.floor((e.clientX - b.left) / cw), 0, COLS - 1);
+  me.r = clamp(Math.floor((e.clientY - b.top) / lh), 0, ROWS - 1);
   moveMine();
   keys.focus();
 });
@@ -152,7 +169,6 @@ function newline() {
   me.r = (me.r + 1) % ROWS;
 }
 function type(ch) {
-  if (!me) return;
   if (ch === '\n' || ch === '\r') newline();
   else {
     if (ch.trim()) { put('me', me.c, me.r, ch); net.send({ t: 'char', c: me.c, r: me.r, ch }); }
@@ -161,7 +177,6 @@ function type(ch) {
   moveMine();
 }
 function back() {
-  if (!me) return;
   if (--me.c < 0) { me.c = COLS - 1; me.r = (me.r + ROWS - 1) % ROWS; }
   const key = me.c + ',' + me.r, s = cells.get(key);
   if (s && !s.classList.contains('them')) { s.remove(); cells.delete(key); net.send({ t: 'del', c: me.c, r: me.r }); }
@@ -181,14 +196,22 @@ keys.addEventListener('input', e => {
 keys.addEventListener('compositionend', e => { for (const ch of e.data || '') type(ch); reset(); });
 keys.addEventListener('keydown', e => {
   const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-  if (step && me) {
+  if (step) {
     e.preventDefault();
-    me.c = Math.min(COLS - 1, Math.max(0, me.c + step[0]));
-    me.r = Math.min(ROWS - 1, Math.max(0, me.r + step[1]));
-    me.start = me.c;
+    me.c = me.start = clamp(me.c + step[0], 0, COLS - 1);
+    me.r = clamp(me.r + step[1], 0, ROWS - 1);
     moveMine();
   }
   if (e.key === 'Escape') keys.blur();
+});
+// On a computer you can just start typing
+document.addEventListener('keydown', e => {
+  if (document.activeElement !== document.body || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace') {
+    e.preventDefault();
+    keys.focus();
+    if (e.key === 'Backspace') back(); else type(e.key === 'Enter' ? '\n' : e.key);
+  }
 });
 
 // A stand-in for trying the page alone (test): someone gets in, writes a
@@ -201,11 +224,11 @@ let guest = null;
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const wait = ms => new Promise(go => setTimeout(go, ms));
 async function letIn() {
-  const g = guest = { c: rnd(0, COLS - 14), r: rnd(0, ROWS - 1) };
+  const g = guest = { c: rnd(0, COLS - 12), r: rnd(0, ROWS - 1) };
   together = true; setCount(2);
   tell('Someone got stuck in here with you.', true);
   testLink.textContent = 'let them out (test)';
-  at(theirs, g.c, g.r); ink.append(theirs);
+  at(theirs, g.c, g.r); floor.append(theirs);
   const until = Date.now() + rnd(60000, 90000);
   await wait(2500);
   while (guest === g && Date.now() < until) {
@@ -219,8 +242,8 @@ async function letIn() {
     }
     await wait(rnd(2500, 6000));
     if (guest !== g) return;
-    if (me && Math.random() < 0.5) { g.c = Math.max(0, Math.min(COLS - 14, me.start + rnd(-6, 6))); g.r = Math.max(0, Math.min(ROWS - 1, me.r + rnd(-3, 3))); }
-    else { g.c = rnd(0, COLS - 14); g.r = rnd(0, ROWS - 1); }
+    if (Math.random() < 0.5) { g.c = clamp(me.start + rnd(-6, 6), 0, COLS - 12); g.r = clamp(me.r + rnd(-3, 3), 0, ROWS - 1); }
+    else { g.c = rnd(0, COLS - 12); g.r = rnd(0, ROWS - 1); }
     at(theirs, g.c, g.r); restartBlink(theirs);
   }
   if (guest === g) letOut();
@@ -228,7 +251,7 @@ async function letIn() {
 function letOut() {
   guest = null; together = false; setCount(1);
   theirs.remove();
-  tell('The other person got out. You are alone again.');
+  tell('They got out. You are alone again.');
   testLink.textContent = 'let someone in (test)';
 }
 testLink.addEventListener('click', e => { e.preventDefault(); guest ? letOut() : letIn(); });

@@ -226,13 +226,14 @@ const lines = ['hello?', 'is anyone there', 'oh hi', 'we are stuck', 'how long h
                'i can see you writing', 'this music though', 'i was going to floor 7', 'hi'];
 const theirs = caret('them');
 const testLink = $('.test');
-let guest = null;
+let guest = null, metBefore = false;   // someone new after the first drops in through the vent they left by
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const wait = ms => new Promise(go => setTimeout(go, ms));
 async function letIn() {
   const g = guest = { c: rnd(0, COLS - 12), r: rnd(0, ROWS - 1) };
   together = true; setCount(2);
-  tell('Someone got stuck in here with you.', true);
+  tell(metBefore ? 'Someone new dropped in through the top vent.' : 'Someone got stuck in here with you.', true);
+  metBefore = true;
   testLink.textContent = 'let them out (test)';
   at(theirs, g.c, g.r); floor.append(theirs);
   const until = Date.now() + rnd(60000, 90000);

@@ -256,7 +256,7 @@ async function letIn() {
 function letOut() {
   guest = null; together = false; setCount(1);
   theirs.remove();
-  tell('They got out. You are alone again.');
+  tell('They escaped through the top vent. You\u2019re alone again.');
   testLink.textContent = 'let someone in (test)';
 }
 testLink.addEventListener('click', e => { e.preventDefault(); guest ? letOut() : letIn(); });

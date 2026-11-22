@@ -263,10 +263,10 @@ const LINE = 'wss://kcwxlmzeorhuhqjqxuxv.supabase.co/realtime/v1/websocket?vsn=1
 const HELLO = 'https://kcwxlmzeorhuhqjqxuxv.supabase.co/rest/v1/rpc/elevator_hello';
 const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtjd3hsbXplb3JodWhxanF4dXh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUzODEzNTgsImV4cCI6MjExMDk1NzM1OH0.LIy76o3Yr5LBbV7JvFlRIoAXGPXvUh-cfR7KTIV68to';
 const LOBBY = 'realtime:lobby';
-const REST = 8000;            // ms after someone leaves before someone new can drop in
+const REST = 3000;            // ms after someone leaves before someone new can drop in (short: nobody should be alone long)
 const theirs = caret('them');
 let ws = null, seq = 0, myId = '', since = 0, inLobby = false, counted = false, metBefore = false;
-let lobby = new Map(), room = null, roomJoin = null, partner = null, trying = null, restUntil = 0, restTimer;
+let lobby = new Map(), room = null, roomJoin = null, partner = null, trying = null, restUntil = 0, restTimer, tryTimer;
 
 const wire = (topic, event, payload) => { const ref = String(++seq); if (ws?.readyState === 1) ws.send(JSON.stringify({ topic, event, payload, ref })); return ref; };
 const join = topic => wire(topic, 'phx_join', { config: { broadcast: { self: false, ack: false }, presence: { key: myId, enabled: true }, private: false }, access_token: KEY });
@@ -292,7 +292,15 @@ function connect() {
 setInterval(() => wire('phoenix', 'heartbeat', {}), 25000);
 
 function hear({ topic, event, payload, ref }) {
-  if (event === 'phx_error' || event === 'phx_close') { if (topic === LOBBY) ws?.close(); else if (topic === room) leftAlone(!!partner); return; }
+  // A closed elevator is only ever the echo of leaving one (and can arrive after
+  // stepping back into the same one), so it's ignored; a broken one counts as
+  // the other person gone if you were together, else you just try again
+  if (event === 'phx_close') { if (topic === LOBBY) ws?.close(); return; }
+  if (event === 'phx_error') {
+    if (topic === LOBBY) ws?.close();
+    else if (topic === room) { if (partner) leftAlone(true); else { room = trying = null; clearTimeout(tryTimer); soon(); } }
+    return;
+  }
   const presence = event === 'presence_state' || event === 'presence_diff';
   const joins = presence ? (event === 'presence_state' ? payload : payload.joins) : {}, leaves = event === 'presence_diff' ? payload.leaves : {};
   if (topic === LOBBY) {
@@ -313,7 +321,7 @@ function hear({ topic, event, payload, ref }) {
       for (const k in joins) { const e = lobby.get(k) || new Map(); for (const m of joins[k].metas) e.set(m.phx_ref, m); lobby.set(k, e); }
       for (const k in leaves) { const e = lobby.get(k); if (!e) continue; for (const m of leaves[k].metas) e.delete(m.phx_ref); if (!e.size) lobby.delete(k); }
       setCount(Math.max(1, lobby.size));
-      match();
+      soon();
     }
   } else if (topic === room) {
     if (event === 'phx_reply') { if (ref === roomJoin && payload?.status === 'ok') track(room, {}); }   // in: now be seen there
@@ -323,28 +331,42 @@ function hear({ topic, event, payload, ref }) {
     } else if (event === 'broadcast') fromThem(payload.event, payload.payload);
   }
 }
-// Who goes with whom: everyone on their own, oldest arrival first, taken in
+// Who goes with whom: everyone on their own, longest waiting first, taken in
 // twos. Every page works it out from the same lobby, so both of a pair choose
-// each other and meet in their elevator; if they don't meet within 5 s (the
-// lobby changed under them) they let go and try again.
-function match() {
-  if (!inLobby || room || Date.now() < restUntil) return;
+// each other and meet in their elevator. Whenever the lobby changes, a page
+// that's waiting for someone checks its choice again and lets go at once if
+// it's changed (that person got stuck with someone else, or left); 5 s
+// without meeting is the last resort.
+// news of the lobby comes in bursts: decide once it has settled a moment
+let matchTimer;
+const soon = () => { clearTimeout(matchTimer); matchTimer = setTimeout(match, 200); };
+const metaOf = k => { const e = lobby.get(k); return e && [...e.values()].at(-1); };
+function partnerFor() {
   const alone = [...lobby].map(([k, e]) => [k, [...e.values()].at(-1)]).filter(([, m]) => m.room === null)
     .sort((a, b) => a[1].t - b[1].t || (a[0] < b[0] ? -1 : 1)).map(([k]) => k);
-  const i = alone.indexOf(myId), p = i < 0 ? null : alone[i % 2 ? i - 1 : i + 1];
-  if (!p) return;
-  trying = p; room = 'realtime:room.' + [myId, p].sort().join('.');
+  const i = alone.indexOf(myId);
+  return i < 0 ? null : alone[i % 2 ? i - 1 : i + 1] || null;
+}
+function match() {
+  if (!inLobby || partner || Date.now() < restUntil) return;
+  if (trying && metaOf(trying)?.room === room) return paired();   // their news in the lobby beat their arrival in our elevator
+  const want = partnerFor();
+  if (trying && want === trying) return;   // still the right one: keep waiting for them
+  if (trying) { wire(room, 'phx_leave', {}); room = trying = null; clearTimeout(tryTimer); }
+  if (!want) return;
+  trying = want; room = 'realtime:room.' + [myId, want].sort().join('.');
   roomJoin = join(room);
   const r = room;
-  setTimeout(() => {
+  tryTimer = setTimeout(() => {
     if (room !== r || !trying) return;
     wire(r, 'phx_leave', {}); room = trying = null;
-    restUntil = Date.now() + 1000 + Math.random() * 2000;
-    setTimeout(match, 3100);
+    restUntil = Date.now() + 500 + Math.random() * 1000;
+    setTimeout(match, 1600);
   }, 5000);
 }
 function paired() {
   partner = trying; trying = null; together = true;
+  clearTimeout(tryTimer);
   track(LOBBY, { t: since, room });   // taken: nobody else picks either of you
   tell(metBefore ? 'Someone new dropped in through the top vent.' : 'Someone got stuck in here with you.', true);
   metBefore = true;
@@ -357,7 +379,7 @@ function leftAlone(show) {
   restUntil = Date.now() + REST;   // a breather before someone new drops in
   if (inLobby) track(LOBBY, { t: since, room: 'resting' });
   clearTimeout(restTimer);
-  restTimer = setTimeout(() => { if (inLobby && !room) track(LOBBY, { t: since, room: null }); }, REST + 50);
+  restTimer = setTimeout(() => { if (inLobby && !room) { since = Date.now(); track(LOBBY, { t: since, room: null }); } }, REST + 50);   // waiting from now
   if (show) notice('They escaped through the top vent.', 'You’re alone again.');
   status();
 }

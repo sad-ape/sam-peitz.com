@@ -7,8 +7,9 @@
 <title>Stuck elevator</title>
 <style>
   /* 1990s HTML: Times on white, the first browsers' colours (link blue, red),
-     letters in Courier. Nothing is stored and nothing is loaded from anywhere
-     else: you're here while the page is open, then you're gone. */
+     letters in Courier. Nothing anyone writes is stored, and the only thing
+     reached elsewhere is the live line to the elevator server: you're here
+     while the page is open, then you're gone. */
   html { color-scheme: light; -webkit-text-size-adjust: 100%; }
   body { margin: 8px; background: #fff; color: #000; font-family: "Times New Roman", Times, serif;
          font-size: var(--fs, 16px);   /* every word on the page the size of the letters on the floor */
@@ -47,7 +48,7 @@
 <p><span class="count">0001</span> <span class="who">person is</span> stuck in an elevator right now</p>
 <div class="car"><svg aria-hidden="true"></svg><div class="floor"><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div></div>
 <p class="say"></p>
-<p><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="test">let someone in (test)</a> &nbsp; <a href="#" class="what" aria-label="What is this?">?</a></p>
+<p><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="what" aria-label="What is this?">?</a></p>
 <p class="about" hidden>You are stuck with a stranger in an elevator. Tap the floor to write. Nothing you write is stored.<span class="total" hidden><br><br><span class="sofar"></span> people have been stuck in here so far.</span><br><br>A digital experience by <a href="https://x.com/samdape" target="_blank" rel="noopener">Sam</a>.</p>
 <script>
 const COLS = 26, ROWS = 16;   // the floor, in letters
@@ -123,13 +124,14 @@ const caret = who => Object.assign(document.createElement('i'), { className: who
 const restartBlink = el => { el.style.animation = 'none'; el.offsetWidth; el.style.animation = ''; };
 
 // The story line, like an adventure game's
-let together = false, sayTimer;
+let together = false, full = false, sayTimer;
 const spin = Object.assign(document.createElement('span'), { className: 'spin' });
 let spinFrame = 0;
 setInterval(() => { spin.textContent = '|/-\\'[spinFrame++ % 4]; }, 150);
 function status() {
   say.className = 'say';
-  if (together) say.textContent = 'Someone is stuck in here with you.';
+  if (full) say.textContent = 'The building is full. Try again in a minute.';
+  else if (together) say.textContent = 'Someone is stuck in here with you.';
   else { say.textContent = 'You are alone. Waiting for someone to be stuck with '; say.append(spin); }
 }
 function tell(text, flash) {
@@ -142,9 +144,8 @@ function tell(text, flash) {
 status();
 const setCount = n => { $('.count').textContent = String(n).padStart(4, '0'); $('.who').textContent = n === 1 ? 'person is' : 'people are'; };
 
-// The other side. For now a stand-in (below); real people come with the
-// multiplayer step, sending the same three things: where you stand, a
-// letter, a letter taken back.
+// The other side, over the live line (below): where you stand, a letter, a
+// letter taken back
 const net = { send() {} };
 
 // You: standing in the middle to begin with, the caret blinking; tap
@@ -152,12 +153,12 @@ const net = { send() {} };
 const me = { c: 9, r: 7, start: 9 };
 const mine = caret('me');
 const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
-function moveMine() {
+function moveMine(announce = true) {   // a letter already tells them where you are
   at(mine, me.c, me.r);
   at(keys, me.c, me.r);
   if (!mine.isConnected) floor.append(mine);
   restartBlink(mine);
-  net.send({ t: 'at', c: me.c, r: me.r });
+  if (announce) net.send({ t: 'at', c: me.c, r: me.r });
 }
 moveMine();
 car.addEventListener('click', e => {
@@ -175,18 +176,20 @@ function newline() {
   me.r = (me.r + 1) % ROWS;
 }
 function type(ch) {
+  let jumped = !ch.trim();
   if (ch === '\n' || ch === '\r') newline();
   else {
     if (ch.trim()) { put('me', me.c, me.r, ch); net.send({ t: 'char', c: me.c, r: me.r, ch }); }
-    if (++me.c >= COLS) newline();
+    if (++me.c >= COLS) { newline(); jumped = true; }
   }
-  moveMine();
+  moveMine(jumped);
 }
 function back() {
   if (--me.c < 0) { me.c = COLS - 1; me.r = (me.r + ROWS - 1) % ROWS; }
   const key = me.c + ',' + me.r, s = cells.get(key);
-  if (s && !s.classList.contains('them')) { s.remove(); cells.delete(key); net.send({ t: 'del', c: me.c, r: me.r }); }
-  moveMine();
+  if (s && !s.classList.contains('them')) { s.remove(); cells.delete(key); }
+  net.send({ t: 'del', c: me.c, r: me.r });
+  moveMine(false);
 }
 // The keyboard types into a textarea holding one space, so that even
 // backspace makes an input event; every keystroke is read and the space put back
@@ -220,48 +223,152 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// A stand-in for trying the page alone (test): someone gets in, writes a
-// little here and there, sometimes stepping closer to you, then gets out
-const lines = ['hello?', 'is anyone there', 'oh hi', 'we are stuck', 'how long have you been in here',
-               'i can see you writing', 'this music though', 'i was going to floor 7', 'hi'];
+// The live line: everyone with the page open waits in one lobby on the
+// elevator server (Supabase Realtime, in a free project of its own). People
+// on their own are paired first come, first served, each pair in an elevator
+// of its own (a channel) that carries their letters, where they stand and a
+// goodbye. The server keeps none of it. The key is the project's public one,
+// made to sit in web pages.
+const LINE = 'wss://kcwxlmzeorhuhqjqxuxv.supabase.co/realtime/v1/websocket?vsn=1.0.0&apikey=';
+const HELLO = 'https://kcwxlmzeorhuhqjqxuxv.supabase.co/rest/v1/rpc/elevator_hello';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtjd3hsbXplb3JodWhxanF4dXh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUzODEzNTgsImV4cCI6MjExMDk1NzM1OH0.LIy76o3Yr5LBbV7JvFlRIoAXGPXvUh-cfR7KTIV68to';
+const LOBBY = 'realtime:lobby';
+const REST = 8000;            // ms after someone leaves before someone new can drop in
 const theirs = caret('them');
-const testLink = $('.test');
-let guest = null, metBefore = false;   // someone new after the first drops in through the vent they left by
-const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-const wait = ms => new Promise(go => setTimeout(go, ms));
-async function letIn() {
-  const g = guest = { c: rnd(0, COLS - 12), r: rnd(0, ROWS - 1) };
-  together = true; setCount(2);
+let ws = null, seq = 0, myId = '', since = 0, inLobby = false, counted = false, metBefore = false;
+let lobby = new Map(), room = null, roomJoin = null, partner = null, trying = null, restUntil = 0, restTimer;
+
+const wire = (topic, event, payload) => { const ref = String(++seq); if (ws?.readyState === 1) ws.send(JSON.stringify({ topic, event, payload, ref })); return ref; };
+const join = topic => wire(topic, 'phx_join', { config: { broadcast: { self: false, ack: false }, presence: { key: myId, enabled: true }, private: false }, access_token: KEY });
+const track = (topic, meta) => wire(topic, 'presence', { type: 'presence', event: 'track', payload: meta });
+const shout = (event, payload = {}) => { if (room) wire(room, 'broadcast', { type: 'broadcast', event, payload }); };
+
+function connect() {
+  myId = [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(16).padStart(2, '0')).join('');
+  since = Date.now(); inLobby = false; lobby.clear(); room = partner = trying = null;
+  const sock = ws = new WebSocket(LINE + KEY);
+  sock.onopen = () => join(LOBBY);
+  sock.onmessage = e => { if (sock === ws) hear(JSON.parse(e.data)); };
+  sock.onclose = () => {
+    if (sock !== ws) return;
+    const was = inLobby;
+    ws = null; inLobby = false; lobby.clear();
+    if (partner || trying) leftAlone(false);
+    setCount(1);
+    if (!was) { full = true; status(); }   // never got in: too many people (or no connection)
+    setTimeout(connect, was ? 2000 : 60000);
+  };
+}
+setInterval(() => wire('phoenix', 'heartbeat', {}), 25000);
+
+function hear({ topic, event, payload, ref }) {
+  if (event === 'phx_error' || event === 'phx_close') { if (topic === LOBBY) ws?.close(); else if (topic === room) leftAlone(!!partner); return; }
+  const presence = event === 'presence_state' || event === 'presence_diff';
+  const joins = presence ? (event === 'presence_state' ? payload : payload.joins) : {}, leaves = event === 'presence_diff' ? payload.leaves : {};
+  if (topic === LOBBY) {
+    if (event === 'phx_reply' && !inLobby) {
+      if (payload?.status !== 'ok') return ws?.close();   // turned away
+      inLobby = true; full = false; status();
+      track(LOBBY, { t: since, room: null });
+      if (!counted) {   // once a visit: one more person stuck in here so far
+        counted = true;
+        fetch(HELLO, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' }, body: '{}' })
+          .then(r => r.ok ? r.json() : null).then(n => { if (typeof n === 'number') setSoFar(n); }).catch(() => {});
+      }
+    } else if (presence) {
+      // Each person is a key with one or more entries (an update adds the new
+      // one and drops the old, sometimes in two messages): a person is gone
+      // only when their last entry is
+      if (event === 'presence_state') lobby.clear();
+      for (const k in joins) { const e = lobby.get(k) || new Map(); for (const m of joins[k].metas) e.set(m.phx_ref, m); lobby.set(k, e); }
+      for (const k in leaves) { const e = lobby.get(k); if (!e) continue; for (const m of leaves[k].metas) e.delete(m.phx_ref); if (!e.size) lobby.delete(k); }
+      setCount(Math.max(1, lobby.size));
+      match();
+    }
+  } else if (topic === room) {
+    if (event === 'phx_reply') { if (ref === roomJoin && payload?.status === 'ok') track(room, {}); }   // in: now be seen there
+    else if (presence) {
+      if (trying && joins[trying]) paired();
+      else if (partner && leaves[partner] && !joins[partner]) leftAlone(true);
+    } else if (event === 'broadcast') fromThem(payload.event, payload.payload);
+  }
+}
+// Who goes with whom: everyone on their own, oldest arrival first, taken in
+// twos. Every page works it out from the same lobby, so both of a pair choose
+// each other and meet in their elevator; if they don't meet within 5 s (the
+// lobby changed under them) they let go and try again.
+function match() {
+  if (!inLobby || room || Date.now() < restUntil) return;
+  const alone = [...lobby].map(([k, e]) => [k, [...e.values()].at(-1)]).filter(([, m]) => m.room === null)
+    .sort((a, b) => a[1].t - b[1].t || (a[0] < b[0] ? -1 : 1)).map(([k]) => k);
+  const i = alone.indexOf(myId), p = i < 0 ? null : alone[i % 2 ? i - 1 : i + 1];
+  if (!p) return;
+  trying = p; room = 'realtime:room.' + [myId, p].sort().join('.');
+  roomJoin = join(room);
+  const r = room;
+  setTimeout(() => {
+    if (room !== r || !trying) return;
+    wire(r, 'phx_leave', {}); room = trying = null;
+    restUntil = Date.now() + 1000 + Math.random() * 2000;
+    setTimeout(match, 3100);
+  }, 5000);
+}
+function paired() {
+  partner = trying; trying = null; together = true;
+  track(LOBBY, { t: since, room });   // taken: nobody else picks either of you
   tell(metBefore ? 'Someone new dropped in through the top vent.' : 'Someone got stuck in here with you.', true);
   metBefore = true;
-  testLink.textContent = 'let them out (test)';
-  at(theirs, g.c, g.r); floor.append(theirs);
-  const until = Date.now() + rnd(60000, 90000);
-  await wait(2500);
-  while (guest === g && Date.now() < until) {
-    let c = g.c, r = g.r;
-    for (const ch of lines[rnd(0, lines.length - 1)]) {
-      await wait(rnd(70, 200));
-      if (guest !== g) return;
-      if (ch !== ' ') put('them', c, r, ch);
-      if (++c >= COLS) { c = g.c; r = (r + 1) % ROWS; }
-      at(theirs, c, r);
-    }
-    await wait(rnd(2500, 6000));
-    if (guest !== g) return;
-    if (Math.random() < 0.5) { g.c = clamp(me.start + rnd(-6, 6), 0, COLS - 12); g.r = clamp(me.r + rnd(-3, 3), 0, ROWS - 1); }
-    else { g.c = rnd(0, COLS - 12); g.r = rnd(0, ROWS - 1); }
-    at(theirs, g.c, g.r); restartBlink(theirs);
-  }
-  if (guest === g) letOut();
+  shout('at', { c: me.c, r: me.r });
 }
-function letOut() {
-  guest = null; together = false; setCount(1);
+function leftAlone(show) {
+  if (room) wire(room, 'phx_leave', {});
+  room = partner = trying = null; together = false;
   theirs.remove();
-  tell('They escaped through the top vent. You\u2019re alone again.');
-  testLink.textContent = 'let someone in (test)';
+  restUntil = Date.now() + REST;   // a breather before someone new drops in
+  if (inLobby) track(LOBBY, { t: since, room: 'resting' });
+  clearTimeout(restTimer);
+  restTimer = setTimeout(() => { if (inLobby && !room) track(LOBBY, { t: since, room: null }); }, REST + 50);
+  if (show) tell('They escaped through the top vent. You’re alone again.'); else status();
 }
-testLink.addEventListener('click', e => { e.preventDefault(); guest ? letOut() : letIn(); });
+// Their side, checked: a letter in a cell of the floor, at most forty a second
+let heard = 0, heardAt = 0;
+function fromThem(ev, d) {
+  if (!partner || !d) return;
+  const now = Date.now();
+  if (now - heardAt > 1000) { heardAt = now; heard = 0; }
+  if (++heard > 40) return;
+  if (ev === 'bye') return leftAlone(true);
+  const { c, r, ch } = d;
+  if (!Number.isInteger(c) || !Number.isInteger(r) || c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
+  if (ev === 'char') {
+    if (typeof ch !== 'string' || [...ch].length !== 1 || /[\u0000-\u001f\u007f-\u009f]/.test(ch)) return;
+    put('them', c, r, ch);
+    at(theirs, Math.min(c + 1, COLS - 1), r);
+  } else if (ev === 'del') {
+    const key = c + ',' + r, s = cells.get(key);
+    if (s && s.classList.contains('them')) { s.remove(); cells.delete(key); }
+    at(theirs, c, r);
+  } else if (ev === 'at') at(theirs, c, r);
+  else return;
+  if (!theirs.isConnected) floor.append(theirs);
+  restartBlink(theirs);
+}
+// Your side: at most twenty a second, which keeps the line (and the bill) small
+let sent = 0, sentAt = 0;
+net.send = ({ t, c, r, ch }) => {
+  if (!partner) return;
+  const now = Date.now();
+  if (now - sentAt > 1000) { sentAt = now; sent = 0; }
+  if (++sent > 20) return;
+  shout(t, ch ? { c, r, ch } : { c, r });
+};
+addEventListener('pagehide', () => {
+  if (partner) shout('bye');
+  if (room) wire(room, 'phx_leave', {});
+  wire(LOBBY, 'phx_leave', {});
+  ws?.close();
+});
+connect();
 
 // The ? : what this is, and (once the elevator server counts them) how many
 // people have been stuck in here so far

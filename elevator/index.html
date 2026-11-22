@@ -19,6 +19,7 @@
   a { color: #0000EE; cursor: pointer; }
   a:active { color: #FF0000; }
   small { font-size: 13px; }
+  .about { max-width: 21em; margin: 12px auto 0; }
   .count { color: #FF0000; font-weight: bold; }
   .spin { font-family: "Courier New", Courier, monospace; }
   .flash { animation: blink 0.5s steps(1) 6; }
@@ -46,7 +47,8 @@
 <p><span class="count">0001</span> <span class="who">person is</span> stuck in an elevator right now</p>
 <div class="car"><svg aria-hidden="true"></svg><div class="floor"><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div></div>
 <p class="say"></p>
-<p><small><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="test">let someone in (test)</a></small></p>
+<p><small><a href="#" class="music">music: on</a> &nbsp; <a href="#" class="test">let someone in (test)</a> &nbsp; <a href="#" class="what" aria-label="What is this?">?</a></small></p>
+<p class="about" hidden><small>Two random people, caught in a digital elevator until one of them leaves. Tap the floor to write. Every letter fades away, and nothing is saved.<span class="total" hidden><br><br><b class="sofar"></b> people have been stuck in here so far.</span></small></p>
 <script>
 const COLS = 26, ROWS = 16;   // the floor, in letters
 const S = 0.62;               // the floor's size against the walls' tops: how far down you look
@@ -258,6 +260,11 @@ function letOut() {
   testLink.textContent = 'let someone in (test)';
 }
 testLink.addEventListener('click', e => { e.preventDefault(); guest ? letOut() : letIn(); });
+
+// The ? : what this is, and (once the elevator server counts them) how many
+// people have been stuck in here so far
+$('.what').addEventListener('click', e => { e.preventDefault(); $('.about').hidden = !$('.about').hidden; });
+const setSoFar = n => { $('.sofar').textContent = n.toLocaleString('en-US'); $('.total').hidden = false; };
 
 // Elevator music: an original little bossa nova, made up here and played by
 // the page itself through a small ceiling speaker (no deep bass, no air),

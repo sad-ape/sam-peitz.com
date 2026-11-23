@@ -254,11 +254,13 @@ document.addEventListener('keydown', e => {
 });
 
 // The live line: everyone with the page open waits in one lobby on the
-// elevator server (Supabase Realtime, in a free project of its own). People
-// on their own are paired first come, first served, each pair in an elevator
-// of its own (a channel) that carries their letters, where they stand and a
-// goodbye. The server keeps none of it. The key is the project's public one,
-// made to sit in web pages.
+// elevator server (Supabase Realtime, in a project of its own). People on
+// their own are paired, each pair in an elevator of its own (a channel) that
+// carries their letters, where they stand and a goodbye. The server keeps
+// none of it. The key is the project's public one, made to sit in web pages;
+// the server only opens the lobby and elevators named room.<32 hex> (private
+// channels; the rules are in elevator/supabase/migrations), and each
+// elevator's name is a secret only its two people can work out (below).
 const LINE = 'wss://kcwxlmzeorhuhqjqxuxv.supabase.co/realtime/v1/websocket?vsn=1.0.0&apikey=';
 const HELLO = 'https://kcwxlmzeorhuhqjqxuxv.supabase.co/rest/v1/rpc/elevator_hello';
 const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtjd3hsbXplb3JodWhxanF4dXh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUzODEzNTgsImV4cCI6MjExMDk1NzM1OH0.LIy76o3Yr5LBbV7JvFlRIoAXGPXvUh-cfR7KTIV68to';
@@ -266,14 +268,34 @@ const LOBBY = 'realtime:lobby';
 const REST = 3000;            // ms after someone leaves before someone new can drop in (short: nobody should be alone long)
 const theirs = caret('them');
 let ws = null, seq = 0, myId = '', since = 0, inLobby = false, counted = false, metBefore = false;
-let lobby = new Map(), room = null, roomJoin = null, partner = null, trying = null, restUntil = 0, restTimer, tryTimer;
+let lobby = new Map(), room = null, roomJoin = null, partner = null, trying = null, tryingTag = '', restUntil = 0, restTimer, tryTimer;
 
 const wire = (topic, event, payload) => { const ref = String(++seq); if (ws?.readyState === 1) ws.send(JSON.stringify({ topic, event, payload, ref })); return ref; };
-const join = topic => wire(topic, 'phx_join', { config: { broadcast: { self: false, ack: false }, presence: { key: myId, enabled: true }, private: false }, access_token: KEY });
+const join = topic => wire(topic, 'phx_join', { config: { broadcast: { self: false, ack: false }, presence: { key: myId, enabled: true }, private: true }, access_token: KEY });
 const track = (topic, meta) => wire(topic, 'presence', { type: 'presence', event: 'track', payload: meta });
 const shout = (event, payload = {}) => { if (room) wire(room, 'broadcast', { type: 'broadcast', event, payload }); };
 
-function connect() {
+// A secret elevator for each pair: everyone shows a public key in the lobby,
+// and the two of a pair each combine the other's with their own private one
+// (ECDH), getting the same secret - the elevator's name, plus a short tag that
+// says "I'm in our elevator" without giving the name away. Nobody else can.
+let pair = null, myKey = '';
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+const secrets = new Map();
+async function elevatorWith(theirKey) {
+  if (!secrets.has(theirKey)) {
+    const pub = await crypto.subtle.importKey('raw', unb64(theirKey), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+    const h = hex(await crypto.subtle.digest('SHA-256', await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, pair.privateKey, 256)));
+    secrets.set(theirKey, { name: h.slice(0, 32), tag: h.slice(32, 40) });
+  }
+  return secrets.get(theirKey);
+}
+
+async function connect() {
+  pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);   // fresh each time: leave and you're gone
+  myKey = b64(await crypto.subtle.exportKey('raw', pair.publicKey)); secrets.clear();
   myId = [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(16).padStart(2, '0')).join('');
   since = Date.now(); inLobby = false; lobby.clear(); room = partner = trying = null;
   const sock = ws = new WebSocket(LINE + KEY);
@@ -307,7 +329,7 @@ function hear({ topic, event, payload, ref }) {
     if (event === 'phx_reply' && !inLobby) {
       if (payload?.status !== 'ok') return ws?.close();   // turned away
       inLobby = true; full = false; status();
-      track(LOBBY, { t: since, room: null });
+      track(LOBBY, { t: since, room: null, k: myKey });
       if (!counted) {   // once a visit: one more person stuck in here so far
         counted = true;
         fetch(HELLO, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' }, body: '{}' })
@@ -342,19 +364,23 @@ let matchTimer;
 const soon = () => { clearTimeout(matchTimer); matchTimer = setTimeout(match, 200); };
 const metaOf = k => { const e = lobby.get(k); return e && [...e.values()].at(-1); };
 function partnerFor() {
-  const alone = [...lobby].map(([k, e]) => [k, [...e.values()].at(-1)]).filter(([, m]) => m.room === null)
+  const alone = [...lobby].map(([k, e]) => [k, [...e.values()].at(-1)]).filter(([, m]) => m.room === null && m.k)
     .sort((a, b) => a[1].t - b[1].t || (a[0] < b[0] ? -1 : 1)).map(([k]) => k);
   const i = alone.indexOf(myId);
   return i < 0 ? null : alone[i % 2 ? i - 1 : i + 1] || null;
 }
-function match() {
+async function match() {
   if (!inLobby || partner || Date.now() < restUntil) return;
-  if (trying && metaOf(trying)?.room === room) return paired();   // their news in the lobby beat their arrival in our elevator
+  if (trying && metaOf(trying)?.with === tryingTag) return paired();   // their news in the lobby beat their arrival in our elevator
   const want = partnerFor();
   if (trying && want === trying) return;   // still the right one: keep waiting for them
   if (trying) { wire(room, 'phx_leave', {}); room = trying = null; clearTimeout(tryTimer); }
   if (!want) return;
-  trying = want; room = 'realtime:room.' + [myId, want].sort().join('.');
+  const sock = ws;
+  let secret;
+  try { secret = await elevatorWith(metaOf(want).k); } catch { return; }
+  if (ws !== sock || !inLobby || partner || trying || partnerFor() !== want) return;   // things moved on meanwhile
+  trying = want; tryingTag = secret.tag; room = 'realtime:room.' + secret.name;
   roomJoin = join(room);
   const r = room;
   tryTimer = setTimeout(() => {
@@ -367,7 +393,7 @@ function match() {
 function paired() {
   partner = trying; trying = null; together = true;
   clearTimeout(tryTimer);
-  track(LOBBY, { t: since, room });   // taken: nobody else picks either of you
+  track(LOBBY, { t: since, room: 'busy', with: tryingTag, k: myKey });   // taken: nobody else picks either of you
   tell(metBefore ? 'Someone new dropped in through the top vent.' : 'Someone got stuck in here with you.', true);
   metBefore = true;
   shout('at', { x: me.x, r: me.r });
@@ -377,9 +403,9 @@ function leftAlone(show) {
   room = partner = trying = null; together = false;
   theirs.remove();
   restUntil = Date.now() + REST;   // a breather before someone new drops in
-  if (inLobby) track(LOBBY, { t: since, room: 'resting' });
+  if (inLobby) track(LOBBY, { t: since, room: 'resting', k: myKey });
   clearTimeout(restTimer);
-  restTimer = setTimeout(() => { if (inLobby && !room) { since = Date.now(); track(LOBBY, { t: since, room: null }); } }, REST + 50);   // waiting from now
+  restTimer = setTimeout(() => { if (inLobby && !room) { since = Date.now(); track(LOBBY, { t: since, room: null, k: myKey }); } }, REST + 50);   // waiting from now
   if (show) notice('They escaped through the top vent.', 'You’re alone again.');
   status();
 }

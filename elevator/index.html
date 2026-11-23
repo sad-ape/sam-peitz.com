@@ -33,10 +33,7 @@
   a:active { color: #FF0000; }
   .about { max-width: 21em; margin: 12px auto 0; }
   .links a + a { margin-left: 1em; }
-  .flowers { align-self: center; margin: 2em 0 0; font: inherit; font-family: "Courier New", Courier, monospace; line-height: 1.15; text-align: left; }
-  .outside { display: flex; align-items: flex-end; justify-content: center; gap: 1.2em; }
-  .outside .flowers { margin: 0; align-self: auto; }
-  .flowers.above { margin: 0 0 2em; }
+  .flower { position: absolute; margin: 0; font: inherit; font-family: "Courier New", Courier, monospace; line-height: 1.15; text-align: left; }
   .count { color: #FF0000; }
   .spin { font-family: "Courier New", Courier, monospace; }
   .flash { animation: blink 0.5s steps(1) 6; }
@@ -68,7 +65,7 @@
 <div class="car"><svg aria-hidden="true"></svg><div class="floor"><textarea class="keys" aria-label="Write in the elevator" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div></div>
 <p class="say"></p>
 <p class="links"><a href="#" class="music">music: on</a><a href="#" class="out" hidden>escape through the vent</a><a href="#" class="what" aria-label="What is this?">?</a></p>
-<p class="about" hidden>You are stuck with a stranger in an elevator. Tap the floor to write. Nothing you write is stored. Be kind.<span class="total" hidden><br><br><span class="sofar"></span> people have been stuck in here so far.</span><br><br>A digital experience by <a href="https://x.com/samdape" target="_blank" rel="noopener">Sam</a>.</p>
+<p class="about" hidden>You are stuck with a stranger in an elevator. Tap the floor to write. Nothing you write is stored. Be kind. We are all stuck in here together.<span class="total" hidden><br><br><span class="sofar"></span> people have been stuck in here so far.</span><br><br>A digital experience by <a href="https://x.com/samdape" target="_blank" rel="noopener">Sam</a>.</p>
 <script>
 const FLOOR_W = 15.6, ROWS = 16;   // the floor: its width in ems of the writing, its depth in lines
 const S = 0.62;               // the floor's size against the walls' tops: how far down you look
@@ -273,7 +270,7 @@ const LOBBY = 'realtime:lobby';
 const REST = 3000;            // ms after someone leaves before someone new can drop in (short: nobody should be alone long)
 const theirs = caret('them');
 let ws = null, seq = 0, myId = '', since = 0, inLobby = false, counted = false, metBefore = false;
-let lobby = new Map(), room = null, roomJoin = null, partner = null, trying = null, tryingTag = '', restUntil = 0, restTimer, tryTimer;
+let lobby = new Map(), room = null, roomJoin = null, partner = null, trying = null, tryingTag = '', restUntil = 0, restTimer, tryTimer, away = false;
 
 const wire = (topic, event, payload) => { const ref = String(++seq); if (ws?.readyState === 1) ws.send(JSON.stringify({ topic, event, payload, ref })); return ref; };
 const join = topic => wire(topic, 'phx_join', { config: { broadcast: { self: false, ack: false }, presence: { key: myId, enabled: true }, private: true }, access_token: KEY });
@@ -334,7 +331,8 @@ function hear({ topic, event, payload, ref }) {
     if (event === 'phx_reply' && !inLobby) {
       if (payload?.status !== 'ok') return ws?.close();   // turned away
       inLobby = true; full = false; status();
-      track(LOBBY, { t: since, room: null, k: myKey });
+      away = document.hidden;
+      track(LOBBY, { t: since, room: away ? 'away' : null, k: myKey });
       if (!counted) {   // once a visit: one more person stuck in here so far
         counted = true;
         fetch(HELLO, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' }, body: '{}' })
@@ -375,7 +373,7 @@ function partnerFor() {
   return i < 0 ? null : alone[i % 2 ? i - 1 : i + 1] || null;
 }
 async function match() {
-  if (!inLobby || partner || Date.now() < restUntil) return;
+  if (!inLobby || partner || away || Date.now() < restUntil) return;
   if (trying && metaOf(trying)?.with === tryingTag) return paired();   // their news in the lobby beat their arrival in our elevator
   const want = partnerFor();
   if (trying && want === trying) return;   // still the right one: keep waiting for them
@@ -412,7 +410,7 @@ function leftAlone(show) {
   restUntil = Date.now() + REST;   // a breather before someone new drops in
   if (inLobby) track(LOBBY, { t: since, room: 'resting', k: myKey });
   clearTimeout(restTimer);
-  restTimer = setTimeout(() => { if (inLobby && !room) { since = Date.now(); track(LOBBY, { t: since, room: null, k: myKey }); } }, REST + 50);   // waiting from now
+  restTimer = setTimeout(() => { if (inLobby && !room && !away) { since = Date.now(); track(LOBBY, { t: since, room: null, k: myKey }); } }, REST + 50);   // waiting from now
   if (show) notice('They escaped through the top vent.', 'You’re alone again.');
   status();
 }
@@ -448,6 +446,25 @@ net.send = ({ t, x, r, ch }) => {
   if (++sent > 20) return;
   shout(t, ch ? { x, r, ch } : { x, r });
 };
+// Out of sight (phone locked, another app or tab): step out of the elevator
+// at once - a phone stops the page soon after - so the other person isn't
+// left with someone who isn't there. Back in sight: waiting again.
+document.addEventListener('visibilitychange', () => {
+  if (outside || !inLobby) return;
+  if (document.hidden) {
+    if (partner) shout('bye');
+    if (room) wire(room, 'phx_leave', {});
+    room = partner = trying = null; together = false;
+    clearTimeout(tryTimer); clearTimeout(restTimer);
+    theirs.remove(); $('.out').hidden = true;
+    away = true;
+    track(LOBBY, { t: since, room: 'away', k: myKey });
+  } else if (away) {
+    away = false; restUntil = 0; since = Date.now();
+    track(LOBBY, { t: since, room: null, k: myKey });
+    status();
+  }
+});
 addEventListener('pagehide', () => {
   if (partner) shout('bye');
   if (room) wire(room, 'phx_leave', {});
@@ -582,6 +599,34 @@ document.addEventListener('visibilitychange', () => {
 // Escaping: through the vent and out of the building. The other person is
 // told you escaped, the line is closed for good, and all that's left is outside.
 var outside = false;
+// Six little flowers outside, scattered afresh each time round the words,
+// clear of them and of each other
+const FLOWERS = [[' @ ', '\\|/', ' | '], [' _ ', '(_)', ' | '], [' * ', '\\|/', ' | '], ['(@)', ' | ', '\\|/'], [' o ', '\\|/', ' | ']];
+function plant() {
+  const words = $('.outside').getBoundingClientRect(), placed = [];
+  const keepOff = { l: words.left - 12, t: words.top - 12, r: words.right + 12, b: words.bottom + 12 };
+  const hits = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+  const cx = words.left + words.width / 2, cy = words.top + words.height / 2;
+  const rx = Math.min(innerWidth / 2 - 8, words.width / 2 + 110), ry = 150;
+  for (let n = 0; n < 6; n++) {
+    const f = document.createElement('pre');
+    f.className = 'flower'; f.setAttribute('aria-hidden', 'true');
+    f.textContent = FLOWERS[Math.floor(Math.random() * FLOWERS.length)].join('\n');
+    document.body.append(f);
+    const { width: w, height: h } = f.getBoundingClientRect();
+    let spot = null;
+    for (let i = 0; i < 300 && !spot; i++) {
+      const x = cx + (Math.random() * 2 - 1) * rx - w / 2, y = cy + (n % 2 ? 1 : -1) * Math.random() * ry - h / 2;   // turns above and below
+      const box = { l: x, t: y, r: x + w, b: y + h };
+      if (box.l < 8 || box.r > innerWidth - 8 || box.t < 8 || box.b > innerHeight - 8) continue;
+      if (hits(box, keepOff) || placed.some(p => hits(box, { l: p.l - 14, t: p.t - 10, r: p.r + 14, b: p.b + 10 }))) continue;
+      spot = box;
+    }
+    if (!spot) { f.remove(); continue; }
+    placed.push(spot);
+    f.style.left = spot.l + 'px'; f.style.top = spot.t + 'px';
+  }
+}
 $('.out').addEventListener('click', e => {
   e.preventDefault();
   outside = true; musicOn = false;
@@ -591,19 +636,8 @@ $('.out').addEventListener('click', e => {
   const sock = ws; ws = null; sock?.close();   // closed by us: no coming back on this page
   if (audio) { fadeTo(0, 1.5); setTimeout(() => audio.suspend(), 1600); }
   document.title = 'Outside';
-  document.body.innerHTML = '<pre class="flowers above" aria-hidden="true">'
-    + '   _      @  \n'
-    + '  (_)    \\|/ \n'
-    + '   |      |  </pre>'
-    + '<div class="outside">'
-    + '<pre class="flowers" aria-hidden="true"> * \n\\|/\n | </pre>'
-    + '<p>You escaped the elevator.<br>You\u2019re outside. Enjoy your day.</p>'
-    + '<pre class="flowers" aria-hidden="true">(@)\n | \n\\|/</pre>'
-    + '</div>'
-    + '<pre class="flowers" aria-hidden="true">'
-    + '  @     _ \n'
-    + ' \\|/   (_)\n'
-    + '  |     | </pre>';
+  document.body.innerHTML = '<p class="outside">You escaped the elevator.<br>You\u2019re outside. Enjoy your day.</p>';
+  plant();
 });
 </script>
 </body>

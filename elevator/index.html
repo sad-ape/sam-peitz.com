@@ -399,6 +399,7 @@ function paired() {
   track(LOBBY, { t: since, room: 'busy', with: tryingTag, k: myKey });   // taken: nobody else picks either of you
   tell(metBefore ? 'Someone new dropped in through the top vent.' : 'Someone got stuck in here with you.', true);
   metBefore = true;
+  lastActive = Date.now();   // a minute to say hello
   $('.out').hidden = false;   // a way out, while there's someone to get away from
   shout('at', { x: me.x, r: me.r });
 }
@@ -468,6 +469,7 @@ function fromBundle(e) {
 // at once - a phone stops the page soon after - so the other person isn't
 // left with someone who isn't there. Back in sight: waiting again.
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) lastActive = Date.now();   // back: the idle clock starts again
   if (outside || !inLobby) return;
   if (document.hidden) {
     if (partner) { flush(); shout('bye'); }
@@ -645,8 +647,8 @@ function plant() {
     f.style.left = spot.l + 'px'; f.style.top = spot.t + 'px';
   }
 }
-$('.out').addEventListener('click', e => {
-  e.preventDefault();
+function goOutside() {
+  if (outside) return;
   outside = true; musicOn = false;
   if (partner) { flush(); shout('bye'); }
   if (room) wire(room, 'phx_leave', {});
@@ -656,7 +658,20 @@ $('.out').addEventListener('click', e => {
   document.title = 'Outside';
   document.body.innerHTML = '<p class="outside">You escaped the elevator.<br>You\u2019re outside. Enjoy your day.</p>';
   plant();
-});
+}
+$('.out').addEventListener('click', e => { e.preventDefault(); goOutside(); });
+
+// Not taking part - no tap or key for a minute while someone's in there with
+// you (they shouldn't sit with nobody), or for two minutes alone - and you're
+// shown outside the same way. Being given someone new, or coming back to the
+// page, starts the clock again. (Out of sight you're 'away', never matched.)
+const IDLE_WITH = 60000, IDLE_ALONE = 120000;
+var lastActive = Date.now();
+for (const ev of ['pointerdown', 'keydown', 'input']) document.addEventListener(ev, () => { lastActive = Date.now(); }, true);
+setInterval(() => {
+  if (outside || document.hidden) return;
+  if (Date.now() - lastActive > (partner ? IDLE_WITH : IDLE_ALONE)) goOutside();
+}, 5000);
 </script>
 </body>
 </html>

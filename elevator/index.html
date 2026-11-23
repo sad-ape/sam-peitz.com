@@ -353,7 +353,7 @@ function hear({ topic, event, payload, ref }) {
     else if (presence) {
       if (trying && joins[trying]) paired();
       else if (partner && leaves[partner] && !joins[partner]) leftAlone(true);
-    } else if (event === 'broadcast') fromThem(payload.event, payload.payload);
+    } else if (event === 'broadcast') { if (payload.event === 'b') fromBundle(payload.payload?.e); else fromThem(payload.event, payload.payload); }
   }
 }
 // Who goes with whom: everyone on their own, longest waiting first, taken in
@@ -403,6 +403,7 @@ function paired() {
   shout('at', { x: me.x, r: me.r });
 }
 function leftAlone(show) {
+  bundle = []; clearTimeout(bundleTimer); bundleTimer = null;
   if (room) wire(room, 'phx_leave', {});
   room = partner = trying = null; together = false;
   theirs.remove();
@@ -437,22 +438,39 @@ function fromThem(ev, d) {
   if (!theirs.isConnected) floor.append(theirs);
   restartBlink(theirs);
 }
-// Your side: at most twenty a second, which keeps the line (and the bill) small
-let sent = 0, sentAt = 0;
+// Your side, in half-second bundles that keep their rhythm: about half the
+// messages for the same typing (the server takes 100 a second in all), and
+// the other person sees your letters half a second later, still one by one
+// as you typed them. At most 25 in a bundle.
+let bundle = [], bundleStart = 0, bundleTimer = null;
+function flush() {
+  clearTimeout(bundleTimer); bundleTimer = null;
+  if (bundle.length && partner) shout('b', { e: bundle });
+  bundle = [];
+}
 net.send = ({ t, x, r, ch }) => {
   if (!partner) return;
-  const now = Date.now();
-  if (now - sentAt > 1000) { sentAt = now; sent = 0; }
-  if (++sent > 20) return;
-  shout(t, ch ? { x, r, ch } : { x, r });
+  if (!bundle.length) { bundleStart = Date.now(); bundleTimer = setTimeout(flush, 500); }
+  if (bundle.length < 25) bundle.push([t[0], x, r, ch || '', Date.now() - bundleStart]);
 };
+// Their bundles, played back at their own pace
+function fromBundle(e) {
+  if (!Array.isArray(e) || e.length > 25) return;
+  const kinds = { c: 'char', d: 'del', a: 'at' }, who = partner;
+  for (const item of e) {
+    if (!Array.isArray(item) || item.length !== 5) continue;
+    const [k, x, r, ch, dt] = item;
+    if (!kinds[k] || !Number.isFinite(dt) || dt < 0 || dt > 600) continue;
+    setTimeout(() => { if (partner === who) fromThem(kinds[k], { x, r, ch }); }, dt);
+  }
+}
 // Out of sight (phone locked, another app or tab): step out of the elevator
 // at once - a phone stops the page soon after - so the other person isn't
 // left with someone who isn't there. Back in sight: waiting again.
 document.addEventListener('visibilitychange', () => {
   if (outside || !inLobby) return;
   if (document.hidden) {
-    if (partner) shout('bye');
+    if (partner) { flush(); shout('bye'); }
     if (room) wire(room, 'phx_leave', {});
     room = partner = trying = null; together = false;
     clearTimeout(tryTimer); clearTimeout(restTimer);
@@ -466,7 +484,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 addEventListener('pagehide', () => {
-  if (partner) shout('bye');
+  if (partner) { flush(); shout('bye'); }
   if (room) wire(room, 'phx_leave', {});
   wire(LOBBY, 'phx_leave', {});
   ws?.close();
@@ -630,7 +648,7 @@ function plant() {
 $('.out').addEventListener('click', e => {
   e.preventDefault();
   outside = true; musicOn = false;
-  if (partner) shout('bye');
+  if (partner) { flush(); shout('bye'); }
   if (room) wire(room, 'phx_leave', {});
   wire(LOBBY, 'phx_leave', {});
   const sock = ws; ws = null; sock?.close();   // closed by us: no coming back on this page

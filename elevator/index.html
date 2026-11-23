@@ -33,6 +33,7 @@
   a:active { color: #FF0000; }
   .about { max-width: 21em; margin: 12px auto 0; }
   .links a + a { margin-left: 1em; }
+  .flowers { align-self: center; margin: 2em 0 0; font: inherit; font-family: "Courier New", Courier, monospace; line-height: 1.15; text-align: left; }
   .count { color: #FF0000; }
   .spin { font-family: "Courier New", Courier, monospace; }
   .flash { animation: blink 0.5s steps(1) 6; }
@@ -587,7 +588,11 @@ $('.out').addEventListener('click', e => {
   const sock = ws; ws = null; sock?.close();   // closed by us: no coming back on this page
   if (audio) { fadeTo(0, 1.5); setTimeout(() => audio.suspend(), 1600); }
   document.title = 'Outside';
-  document.body.innerHTML = '<p>You escaped the elevator.<br>You\u2019re outside. Enjoy your day.</p>';
+  document.body.innerHTML = '<p>You escaped the elevator.<br>You\u2019re outside. Enjoy your day.</p>'
+    + '<pre class="flowers" aria-hidden="true">'
+    + '  @     _ \n'
+    + ' \\|/   (_)\n'
+    + '  |     | </pre>';
 });
 </script>
 </body>
